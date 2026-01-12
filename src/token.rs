@@ -1,3 +1,5 @@
+use crate::string_pool::StringPool;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Kind {
     // Literals
@@ -6,6 +8,7 @@ pub enum Kind {
     Identifier(usize), // index to string map
 
     // Keywords (start with just these)
+    Var,
     Let,
     Const,
     Function,
@@ -20,6 +23,7 @@ pub enum Kind {
     Slash,
     Equals,
     EqualEqual,
+    EqualEqualEqual,
 
     // Punctuation
     LeftParen,
@@ -50,30 +54,23 @@ impl Token {
         }
     }
 
-    pub fn get_kind(&self) -> &Kind {
-        &self.kind
-    }
-
-    pub fn to_string(&self, kind_str: Option<String>) -> String {
-        if let Some(string) = kind_str {
-            return format!(
-                "{} | line: {} | start: {} | end: {}",
-                string, self.line, self.start, self.end
-            );
+    pub fn print(&self, pool: &StringPool) {
+        match self.kind {
+            Kind::Identifier(idx) | Kind::String(idx) => {
+                let as_str = pool.get_string_by_idx(idx);
+                if let Some(string) = as_str {
+                    println!(
+                        "Identifier: '{}' | line: {} | start: {} | end: {}",
+                        string, self.line, self.start, self.end
+                    );
+                }
+            }
+            _ => {
+                println!(
+                    "{:?} | line: {} | start: {} | end: {}",
+                    self.kind, self.line, self.start, self.end
+                );
+            }
         }
-        return format!(
-            "{:?} | line: {} | start: {} | end: {}",
-            self.kind, self.line, self.start, self.end
-        );
-    }
-}
-
-impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{:?} | line: {} | start: {} | end: {}",
-            self.kind, self.line, self.start, self.end
-        )
     }
 }
