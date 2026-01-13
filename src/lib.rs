@@ -1,17 +1,20 @@
 use std::process;
 
-use crate::{global::SharedContext, lexer::Lexer};
+use crate::{global::SharedContext, lexer::Lexer, parser::Parser};
 
+mod expr;
 mod global;
 mod lexer;
+mod parser;
+mod stmt;
 mod string_pool;
 mod token;
 
 pub fn lex() {
-    let source = "let x = 'hotdog';\nhotdog + (2 + 5);";
+    let source = "function hotdog(a, b, c) { return true; }";
     let mut context = SharedContext::new();
     let mut lexer = Lexer::new(&mut context, source);
-    lexer.lex();
+    let tokens = lexer.lex();
 
     if lexer.had_errors() {
         lexer.replay_errors();
@@ -19,5 +22,12 @@ pub fn lex() {
     }
 
     println!("Lexing completed");
-    lexer.print_tokens();
+    // lexer.print_tokens();
+
+    let mut parser = Parser::new(tokens);
+    let statements = parser.parse();
+
+    for statement in statements {
+        println!("{statement}");
+    }
 }

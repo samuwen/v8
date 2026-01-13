@@ -37,5 +37,8 @@ pub fn initialize_new_string_pool() -> StringPool {
     map.add_string("return");
     map.add_string("if");
     map.add_string("else");
+    map.add_string("break");
+    map.add_string("continue");
+    map.add_string("while");
     return map;
 }

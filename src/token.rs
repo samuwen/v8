@@ -6,6 +6,8 @@ pub enum Kind {
     Number(f64),
     String(usize),     // index to string map
     Identifier(usize), // index to string map
+    True,
+    False,
 
     // Keywords (start with just these)
     Var,
@@ -15,15 +17,22 @@ pub enum Kind {
     Return,
     If,
     Else,
+    Break,
+    Continue,
+    While,
 
     // Operators (minimal set)
     Plus,
     Minus,
     Star,
     Slash,
+    Bang,
     Equals,
     EqualEqual,
     EqualEqualEqual,
+    NotEqual,
+    LessThan,
+    GreaterThan,
 
     // Punctuation
     LeftParen,
@@ -36,7 +45,7 @@ pub enum Kind {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Token {
     kind: Kind,
     line: usize,
@@ -51,6 +60,15 @@ impl Token {
             line,
             start,
             end,
+        }
+    }
+
+    pub fn new_eof() -> Self {
+        Self {
+            kind: Kind::Eof,
+            line: 0,
+            start: 0,
+            end: 0,
         }
     }
 
@@ -72,5 +90,17 @@ impl Token {
                 );
             }
         }
+    }
+
+    pub fn is_kind(&self, kind: &Kind) -> bool {
+        &self.kind == kind
+    }
+
+    pub fn is_kinds(&self, kinds: Vec<Kind>) -> bool {
+        kinds.iter().any(|k| self.is_kind(k))
+    }
+
+    pub fn get_kind(&self) -> &Kind {
+        &self.kind
     }
 }

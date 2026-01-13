@@ -20,11 +20,12 @@ pub struct Lexer<'a, 'b> {
 
 impl<'a, 'b> Lexer<'a, 'b> {
     pub fn new(context: &'b mut SharedContext, source: &'a str) -> Self {
-        let chars = source.chars().peekable();
+        let mut chars = source.chars().peekable();
+        let first_char = chars.next().unwrap_or('\0');
         Self {
             context,
             current_column: 0,
-            current_char: '\0', // should never be read, so initialize to EOF
+            current_char: first_char,
             errors: vec![],
             had_error: false,
             line: 1,
@@ -34,72 +35,50 @@ impl<'a, 'b> Lexer<'a, 'b> {
         }
     }
 
-    pub fn lex(&mut self) {
+    pub fn lex(&mut self) -> Vec<Token> {
         loop {
-            self.next_char();
             if self.current_char == '\0' {
+                self.add_token(Kind::Eof);
                 break;
             }
 
+            self.start = self.current_column;
             match self.current_char.to_ascii_lowercase() {
                 '0'..='9' => {
-                    self.start = self.current_column;
-                    let mut digit_value = String::from(self.current_char);
-                    while let Some(&v) = self.peek_next_char() {
-                        match v {
-                            '0'..='9' => {
-                                let next = self.next_char();
-                                digit_value.push(next);
-                            }
-                            '.' => {
-                                self.next_char(); // throw it away
-                                digit_value.push('.');
+                    let mut digit_value = String::new();
+                    loop {
+                        match self.current_char.to_ascii_lowercase() {
+                            '0'..='9' | '.' => {
+                                digit_value.push(self.current_char);
+                                self.next_char();
                             }
                             '_' => {
-                                self.next_char(); // throw it away
+                                self.next_char(); // discard
                             }
-                            _ => {
-                                // break - we're done
-                                break;
-                            }
+                            _ => break,
                         }
                     }
-                    if !self.had_error {
-                        let number = digit_value.parse::<f64>();
-                        match number {
-                            Ok(num) => self.add_token(Kind::Number(num)),
-                            Err(e) => {
-                                eprintln!("{e}");
-                                self.report_error("f64 failed to parse");
-                            }
+                    let number = digit_value.parse::<f64>();
+                    match number {
+                        Ok(num) => self.add_token(Kind::Number(num)),
+                        Err(e) => {
+                            eprintln!("{e}");
+                            self.report_error("f64 failed to parse");
                         }
                     }
                 }
 
                 // identifier
                 'a'..='z' => {
-                    self.start = self.current_column;
                     let mut ident = String::new();
-                    while !self.is_whitespace() {
+                    loop {
                         match self.current_char.to_ascii_lowercase() {
                             'a'..'z' | '_' | '0'..'9' => {
                                 ident.push(self.current_char);
+                                self.next_char();
                             }
-                            _ => {
-                                let message = format!(
-                                    "Invalid identifier character: '{}'",
-                                    self.current_char
-                                );
-                                self.report_error(&message);
-                            }
+                            _ => break,
                         }
-                        let peeked = self.peek_next_char();
-                        if let Some(c) = peeked {
-                            if c.is_whitespace() {
-                                break;
-                            }
-                        }
-                        self.next_char();
                     }
 
                     match ident.as_str() {
@@ -124,6 +103,21 @@ impl<'a, 'b> Lexer<'a, 'b> {
                         "var" => {
                             self.add_token(Kind::Var);
                         }
+                        "break" => {
+                            self.add_token(Kind::Break);
+                        }
+                        "continue" => {
+                            self.add_token(Kind::Continue);
+                        }
+                        "while" => {
+                            self.add_token(Kind::While);
+                        }
+                        "true" => {
+                            self.add_token(Kind::True);
+                        }
+                        "false" => {
+                            self.add_token(Kind::False);
+                        }
                         _ => {
                             let idx = self.context.string_pool.add_string(&ident);
                             self.add_token(Kind::Identifier(idx))
@@ -139,29 +133,31 @@ impl<'a, 'b> Lexer<'a, 'b> {
                 }
                 '\n' => {
                     self.line += 1;
+                    self.next_char();
                 }
                 ' ' | '\t' => {
                     self.current_column += 1;
+                    self.next_char();
                 }
                 '+' => {
-                    self.add_token(Kind::Plus);
+                    self.add_token_and_advance(Kind::Plus);
                 }
                 '-' => {
-                    self.add_token(Kind::Minus);
+                    self.add_token_and_advance(Kind::Minus);
                 }
                 '*' => {
-                    self.add_token(Kind::Star);
+                    self.add_token_and_advance(Kind::Star);
                 }
                 '/' => {
                     let is_single_comment = self.check_peeked_char('/');
                     if is_single_comment {
-                        self.next_char(); // consume the other slash
                         while self.current_char != '\n' {
                             self.next_char();
                         }
                         self.line += 1;
+                        self.next_char();
                     } else {
-                        self.add_token(Kind::Slash);
+                        self.add_token_and_advance(Kind::Slash);
                     }
                 }
                 '=' => {
@@ -171,34 +167,49 @@ impl<'a, 'b> Lexer<'a, 'b> {
                         let is_triple_equal = self.check_peeked_char('=');
                         if is_triple_equal {
                             self.next_char();
-                            self.add_token(Kind::EqualEqualEqual);
+                            self.add_token_and_advance(Kind::EqualEqualEqual);
                         } else {
-                            self.add_token(Kind::EqualEqual);
+                            self.add_token_and_advance(Kind::EqualEqual);
                         }
                     } else {
-                        self.add_token(Kind::Equals);
+                        self.add_token_and_advance(Kind::Equals);
                     }
                 }
                 '(' => {
-                    self.add_token(Kind::LeftParen);
+                    self.add_token_and_advance(Kind::LeftParen);
                 }
                 ')' => {
-                    self.add_token(Kind::RightParen);
+                    self.add_token_and_advance(Kind::RightParen);
                 }
                 '{' => {
-                    self.add_token(Kind::LeftBrace);
+                    self.add_token_and_advance(Kind::LeftBrace);
                 }
                 '}' => {
-                    self.add_token(Kind::RightBrace);
+                    self.add_token_and_advance(Kind::RightBrace);
                 }
                 ';' => {
-                    self.add_token(Kind::Semicolon);
+                    self.add_token_and_advance(Kind::Semicolon);
                 }
                 ',' => {
-                    self.add_token(Kind::Comma);
+                    self.add_token_and_advance(Kind::Comma);
+                }
+                '!' => {
+                    let is_not_equals = self.check_peeked_char('=');
+                    if is_not_equals {
+                        self.next_char();
+                        self.add_token_and_advance(Kind::NotEqual);
+                    } else {
+                        self.add_token_and_advance(Kind::Bang);
+                    }
+                }
+                '<' => {
+                    self.add_token_and_advance(Kind::LessThan);
+                }
+                '>' => {
+                    self.add_token_and_advance(Kind::GreaterThan);
                 }
                 '\0' => {
-                    self.add_token(Kind::Eof);
+                    self.add_token_and_advance(Kind::Eof);
                 }
                 _ => {
                     let message = format!("Unhandled character: '{}'", self.current_char);
@@ -206,6 +217,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
                 }
             }
         }
+        self.tokens.clone()
     }
 
     pub fn had_errors(&mut self) -> bool {
@@ -254,6 +266,11 @@ impl<'a, 'b> Lexer<'a, 'b> {
     fn add_token(&mut self, kind: Kind) {
         self.tokens
             .push(Token::new(kind, self.line, self.start, self.current_column))
+    }
+
+    fn add_token_and_advance(&mut self, kind: Kind) {
+        self.next_char();
+        self.add_token(kind);
     }
 
     fn lex_string(&mut self, terminator: char) {
