@@ -25,7 +25,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         Self {
             context,
             current_column: 0,
-            current_char: first_char,
+            current_char: first_char.clone(),
             errors: vec![],
             had_error: false,
             line: 1,
@@ -230,12 +230,6 @@ impl<'a, 'b> Lexer<'a, 'b> {
         }
     }
 
-    pub fn print_tokens(&self) {
-        for token in &self.tokens {
-            token.print(&self.context.string_pool);
-        }
-    }
-
     fn next_char(&mut self) -> char {
         self.current_column += 1;
         self.current_char = self.source.next().unwrap_or('\0');
@@ -294,16 +288,13 @@ impl<'a, 'b> Lexer<'a, 'b> {
                     }
                 }
             }
-            self.current_char = self.next_char();
+            self.next_char();
         }
         if !self.had_error {
             let idx = self.context.string_pool.add_string(&string);
             self.add_token(Kind::String(idx));
+            self.next_char();
         }
-    }
-
-    fn is_whitespace(&self) -> bool {
-        self.current_char == '\0' || self.current_char.is_whitespace()
     }
 
     fn check_peeked_char(&mut self, check_char: char) -> bool {

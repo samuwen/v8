@@ -11,7 +11,7 @@ mod string_pool;
 mod token;
 
 pub fn lex() {
-    let source = "function hotdog(a, b, c) { return true; }";
+    let source = "const x = \"hi\";";
     let mut context = SharedContext::new();
     let mut lexer = Lexer::new(&mut context, source);
     let tokens = lexer.lex();
