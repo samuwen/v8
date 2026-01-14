@@ -1,9 +1,10 @@
 use std::vec::IntoIter;
 
 use crate::{
-    expr::{ArrowFunctionReturn, Expr, Value},
+    expr::Expr,
     stmt::Stmt,
     token::{Kind, Token},
+    value::{ArrowFunctionReturn, Value},
 };
 
 pub struct Parser {
@@ -136,6 +137,36 @@ impl Parser {
                 self.expect_and_consume(&Kind::RightParen, "WhileStatement")?;
                 let stmt = self.handle_statements()?;
                 Ok(Stmt::new_while(expr, stmt))
+            }
+
+            Kind::For => {
+                self.next_token();
+                self.expect_and_consume(&Kind::LeftParen, "ForStatement")?;
+                let initializer = if self.current_token.is_kind(&Kind::Semicolon) {
+                    None
+                } else {
+                    Some(self.handle_statements()?)
+                };
+                self.expect_and_consume(&Kind::Semicolon, "ForStatement")?;
+
+                let condition = if self.current_token.is_kind(&Kind::Semicolon) {
+                    None
+                } else {
+                    Some(self.handle_expressions()?)
+                };
+                self.expect_and_consume(&Kind::Semicolon, "ForStatement")?;
+
+                let state = if self.current_token.is_kind(&Kind::Semicolon) {
+                    self.next_token();
+                    None
+                } else {
+                    Some(self.handle_expressions()?)
+                };
+                self.expect_and_consume(&Kind::RightParen, "ForStatement")?;
+
+                let body = self.handle_statements()?;
+
+                Ok(Stmt::new_for(initializer, condition, state, body))
             }
 
             _ => {
@@ -373,10 +404,6 @@ impl Parser {
     fn next_token(&mut self) {
         if let Some(tok) = self.tokens.next() {
             self.current_token = tok;
-            println!(
-                "Advancing to next token. Now: {:?}",
-                self.current_token.get_kind()
-            );
         }
     }
 

@@ -22,6 +22,7 @@ pub enum Kind {
     Break,
     Continue,
     While,
+    For,
 
     // Operators
     Plus,

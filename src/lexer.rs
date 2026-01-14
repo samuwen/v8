@@ -118,6 +118,9 @@ impl<'a, 'b> Lexer<'a, 'b> {
                         "false" => {
                             self.add_token(Kind::False);
                         }
+                        "for" => {
+                            self.add_token(Kind::For);
+                        }
                         "null" => self.add_token(Kind::Null),
                         "undefined" => self.add_token(Kind::Undefined),
                         _ => {

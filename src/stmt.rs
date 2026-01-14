@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::expr::Expr;
+use crate::{expr::Expr, global::SharedContext, value::Value};
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
@@ -12,6 +12,7 @@ pub enum Stmt {
         initializer: Option<Box<Stmt>>,
         condition: Option<Expr>,
         state: Option<Expr>,
+        body: Box<Stmt>,
     },
     FunctionDecl {
         identifier: Box<Expr>,
@@ -78,6 +79,27 @@ impl Stmt {
             body: Box::new(body),
         }
     }
+
+    pub fn new_for(
+        init: Option<Stmt>,
+        cond: Option<Expr>,
+        state: Option<Expr>,
+        body: Stmt,
+    ) -> Self {
+        Self::For {
+            initializer: init.map(|o| Box::new(o)),
+            condition: cond,
+            state,
+            body: Box::new(body),
+        }
+    }
+
+    pub fn evaluate(&self, context: &mut SharedContext) -> Value {
+        match self {
+            Self::Expression(expr) => expr.evaluate(context),
+            _ => panic!("The disco"),
+        }
+    }
 }
 
 // pretty printing
@@ -116,6 +138,7 @@ impl Stmt {
                 initializer,
                 condition,
                 state,
+                body,
             } => {
                 writeln!(f, "{}For {{", indent_str)?;
 
@@ -139,6 +162,8 @@ impl Stmt {
                     Some(st) => writeln!(f, "{}", st)?,
                     None => writeln!(f, "{{}}")?,
                 }
+
+                body.fmt_indented(f, indent + 2)?;
 
                 writeln!(f, "{}}}", indent_str)
             }
