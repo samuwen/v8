@@ -73,7 +73,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
                     let mut ident = String::new();
                     loop {
                         match self.current_char.to_ascii_lowercase() {
-                            'a'..'z' | '_' | '0'..'9' => {
+                            'a'..='z' | '_' | '0'..'9' => {
                                 ident.push(self.current_char);
                                 self.next_char();
                             }
@@ -118,8 +118,10 @@ impl<'a, 'b> Lexer<'a, 'b> {
                         "false" => {
                             self.add_token(Kind::False);
                         }
+                        "null" => self.add_token(Kind::Null),
+                        "undefined" => self.add_token(Kind::Undefined),
                         _ => {
-                            let idx = self.context.string_pool.add_string(&ident);
+                            let idx = self.context.string_pool.get_or_intern(&ident);
                             self.add_token(Kind::Identifier(idx))
                         }
                     }
@@ -172,8 +174,17 @@ impl<'a, 'b> Lexer<'a, 'b> {
                             self.add_token_and_advance(Kind::EqualEqual);
                         }
                     } else {
-                        self.add_token_and_advance(Kind::Equals);
+                        let is_arrow = self.check_peeked_char('>');
+                        if is_arrow {
+                            self.next_char();
+                            self.add_token_and_advance(Kind::Arrow);
+                        } else {
+                            self.add_token_and_advance(Kind::Equals);
+                        }
                     }
+                }
+                ':' => {
+                    self.add_token_and_advance(Kind::Colon);
                 }
                 '(' => {
                     self.add_token_and_advance(Kind::LeftParen);
@@ -182,10 +193,10 @@ impl<'a, 'b> Lexer<'a, 'b> {
                     self.add_token_and_advance(Kind::RightParen);
                 }
                 '{' => {
-                    self.add_token_and_advance(Kind::LeftBrace);
+                    self.add_token_and_advance(Kind::LeftCurly);
                 }
                 '}' => {
-                    self.add_token_and_advance(Kind::RightBrace);
+                    self.add_token_and_advance(Kind::RightCurly);
                 }
                 ';' => {
                     self.add_token_and_advance(Kind::Semicolon);
@@ -207,6 +218,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
                 }
                 '>' => {
                     self.add_token_and_advance(Kind::GreaterThan);
+                }
+                '[' => {
+                    self.add_token_and_advance(Kind::LeftSquare);
+                }
+                ']' => {
+                    self.add_token_and_advance(Kind::RightSquare);
                 }
                 '\0' => {
                     self.add_token_and_advance(Kind::Eof);
@@ -291,7 +308,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             self.next_char();
         }
         if !self.had_error {
-            let idx = self.context.string_pool.add_string(&string);
+            let idx = self.context.string_pool.get_or_intern(&string);
             self.add_token(Kind::String(idx));
             self.next_char();
         }

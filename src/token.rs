@@ -1,15 +1,17 @@
-use crate::string_pool::StringPool;
+use string_interner::symbol::SymbolU32;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Kind {
     // Literals
     Number(f64),
-    String(usize),     // index to string map
-    Identifier(usize), // index to string map
+    String(SymbolU32),     // index to string map
+    Identifier(SymbolU32), // index to string map
     True,
     False,
+    Null,
+    Undefined,
 
-    // Keywords (start with just these)
+    // Keywords
     Var,
     Let,
     Const,
@@ -21,7 +23,7 @@ pub enum Kind {
     Continue,
     While,
 
-    // Operators (minimal set)
+    // Operators
     Plus,
     Minus,
     Star,
@@ -37,8 +39,12 @@ pub enum Kind {
     // Punctuation
     LeftParen,
     RightParen,
-    LeftBrace,
-    RightBrace,
+    LeftCurly,
+    RightCurly,
+    LeftSquare,
+    RightSquare,
+    Arrow,
+    Colon,
     Semicolon,
     Comma,
 
@@ -48,47 +54,27 @@ pub enum Kind {
 #[derive(Clone, Debug)]
 pub struct Token {
     kind: Kind,
-    line: usize,
-    start: usize,
-    end: usize,
+    _line: usize,
+    _start: usize,
+    _end: usize,
 }
 
 impl Token {
     pub fn new(kind: Kind, line: usize, start: usize, end: usize) -> Self {
         Self {
             kind,
-            line,
-            start,
-            end,
+            _line: line,
+            _start: start,
+            _end: end,
         }
     }
 
     pub fn new_eof() -> Self {
         Self {
             kind: Kind::Eof,
-            line: 0,
-            start: 0,
-            end: 0,
-        }
-    }
-
-    pub fn print(&self, pool: &StringPool) {
-        match self.kind {
-            Kind::Identifier(idx) | Kind::String(idx) => {
-                let as_str = pool.get_string_by_idx(idx);
-                if let Some(string) = as_str {
-                    println!(
-                        "Identifier: '{}' | line: {} | start: {} | end: {}",
-                        string, self.line, self.start, self.end
-                    );
-                }
-            }
-            _ => {
-                println!(
-                    "{:?} | line: {} | start: {} | end: {}",
-                    self.kind, self.line, self.start, self.end
-                );
-            }
+            _line: 0,
+            _start: 0,
+            _end: 0,
         }
     }
 

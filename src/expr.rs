@@ -1,12 +1,33 @@
 use std::fmt;
 
-use crate::token::Token;
+use string_interner::symbol::SymbolU32;
+
+use crate::{stmt::Stmt, token::Token};
+
+#[derive(Clone, Debug)]
+pub enum ArrowFunctionReturn {
+    Expr(Box<Expr>),
+    Stmt(Box<Stmt>),
+}
 
 #[derive(Clone, Debug)]
 pub enum Value {
     Number(f64),
-    String(usize),
+    String(SymbolU32),
     Boolean(bool),
+    Null,
+    Undefined,
+    Array(Vec<Expr>),
+    Object(Vec<(SymbolU32, Expr)>),
+    Function {
+        identifier: Option<Box<Expr>>,
+        arguments: Vec<Expr>,
+        body: Box<Stmt>,
+    },
+    ArrowFunction {
+        arguments: Vec<Expr>,
+        body: ArrowFunctionReturn,
+    },
 }
 
 impl Value {
@@ -14,22 +35,116 @@ impl Value {
         Self::Number(*num)
     }
 
-    pub fn new_string(idx: &usize) -> Self {
+    pub fn new_string(idx: &SymbolU32) -> Self {
         Self::String(*idx)
     }
 
     pub fn new_boolean(b: &bool) -> Self {
         Self::Boolean(*b)
     }
+
+    pub fn new_null() -> Self {
+        Self::Null
+    }
+
+    pub fn new_undefined() -> Self {
+        Self::Undefined
+    }
+
+    pub fn new_array(expressions: Vec<Expr>) -> Self {
+        Self::Array(expressions)
+    }
+
+    pub fn new_object(pairs: Vec<(SymbolU32, Expr)>) -> Self {
+        Self::Object(pairs)
+    }
+
+    pub fn new_function(identifier: Option<Expr>, args: Vec<Expr>, body: Stmt) -> Self {
+        Self::Function {
+            identifier: identifier.map(|id| Box::new(id)),
+            arguments: args,
+            body: Box::new(body),
+        }
+    }
+
+    pub fn new_arrow_function(args: Vec<Expr>, body: ArrowFunctionReturn) -> Self {
+        Self::ArrowFunction {
+            arguments: args,
+            body,
+        }
+    }
+}
+
+impl Value {
+    fn fmt_indented(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+        let indent_str = "  ".repeat(indent);
+
+        match self {
+            Self::Boolean(v) => write!(f, "{v}"),
+            Self::Number(v) => write!(f, "{v}"),
+            Self::String(v) => write!(f, "index: {v:?}"),
+            Self::Null => write!(f, "null"),
+            Self::Undefined => write!(f, "undefined"),
+            Self::Array(e) => write!(
+                f,
+                "[{}]",
+                e.iter()
+                    .map(|exp| exp.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            Self::Object(pairs) => write!(
+                f,
+                "{{ {} }}",
+                pairs
+                    .iter()
+                    .map(|(key, value)| format!("{key:?}: {value}"))
+                    .collect::<Vec<String>>()
+                    .join("\n"),
+            ),
+            Value::Function {
+                identifier,
+                arguments,
+                body,
+            } => {
+                writeln!(f, "{}FunctionExpression {{", indent_str)?;
+                writeln!(f, "{}  identifier: ", indent_str,)?;
+                match identifier {
+                    Some(ident) => {
+                        writeln!(f, "{}", ident)?;
+                    }
+                    None => writeln!(f, "{{}}")?,
+                }
+                writeln!(f, "{}  arguments: [", indent_str)?;
+                for arg in arguments {
+                    writeln!(f, "{}    {}", indent_str, arg)?;
+                }
+                writeln!(f, "{}  ]", indent_str)?;
+                writeln!(f, "{}  body:", indent_str)?;
+                body.fmt_indented(f, indent + 2)?;
+                writeln!(f, "{}}}", indent_str)
+            }
+            Value::ArrowFunction { arguments, body } => {
+                writeln!(f, "{}ArrowFunction {{", indent_str)?;
+                writeln!(f, "{}  arguments: [", indent_str)?;
+                for arg in arguments {
+                    writeln!(f, "{}    {}", indent_str, arg)?;
+                }
+                writeln!(f, "{}  ]", indent_str)?;
+                writeln!(f, "{}  body:", indent_str)?;
+                match body {
+                    ArrowFunctionReturn::Stmt(stmt) => stmt.fmt_indented(f, indent + 2)?,
+                    ArrowFunctionReturn::Expr(expr) => writeln!(f, "{}    {}", indent, expr)?,
+                }
+                writeln!(f, "{}}}", indent_str)
+            }
+        }
+    }
 }
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Boolean(v) => write!(f, "{v}"),
-            Self::Number(v) => write!(f, "{v}"),
-            Self::String(v) => write!(f, "index: {v}"),
-        }
+        self.fmt_indented(f, 0)
     }
 }
 
@@ -50,7 +165,7 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
-    Variable(usize),
+    Variable(SymbolU32),
 }
 
 impl Expr {
@@ -62,7 +177,7 @@ impl Expr {
         Self::Grouping(Box::new(expr))
     }
 
-    pub fn new_variable(value: &usize) -> Self {
+    pub fn new_variable(value: &SymbolU32) -> Self {
         Self::Variable(*value)
     }
 
@@ -117,7 +232,7 @@ impl fmt::Display for Expr {
             }
 
             Expr::Variable(id) => {
-                write!(f, "Variable({})", id)
+                write!(f, "Variable({:?})", id)
             }
         }
     }

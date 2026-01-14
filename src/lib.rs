@@ -7,11 +7,10 @@ mod global;
 mod lexer;
 mod parser;
 mod stmt;
-mod string_pool;
 mod token;
 
 pub fn lex() {
-    let source = "const x = \"hi\";";
+    let source = "const z = (x, y) => x + y;";
     let mut context = SharedContext::new();
     let mut lexer = Lexer::new(&mut context, source);
     let tokens = lexer.lex();

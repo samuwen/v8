@@ -1,14 +1,14 @@
-use crate::string_pool::{StringPool, initialize_new_string_pool};
+use string_interner::{StringInterner, backend::StringBackend};
 
 #[derive(Debug, Clone)]
 pub struct SharedContext {
-    pub string_pool: StringPool,
+    pub string_pool: StringInterner<StringBackend>,
 }
 
 impl SharedContext {
     pub fn new() -> Self {
         Self {
-            string_pool: initialize_new_string_pool(),
+            string_pool: StringInterner::new(),
         }
     }
 }

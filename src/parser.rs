@@ -1,7 +1,7 @@
 use std::vec::IntoIter;
 
 use crate::{
-    expr::{Expr, Value},
+    expr::{ArrowFunctionReturn, Expr, Value},
     stmt::Stmt,
     token::{Kind, Token},
 };
@@ -14,11 +14,8 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(token_list: Vec<Token>) -> Self {
-        if token_list.len() == 0 {
-            eprintln!("Empty token list passed to parser. Wiring logic wrong?");
-        }
         let mut iter = token_list.into_iter();
-        let first_token = iter.next().unwrap(); // safe because we know we have at least one token
+        let first_token = iter.next().unwrap_or(Token::new_eof());
         Self {
             current_token: first_token,
             errors: vec![],
@@ -82,14 +79,14 @@ impl Parser {
                 Ok(Stmt::new_function(ident, parameters, body))
             }
 
-            Kind::LeftBrace => {
+            Kind::LeftCurly => {
                 self.next_token();
                 let mut statments = vec![];
-                while !self.current_token.is_kind(&Kind::RightBrace) {
+                while !self.current_token.is_kind(&Kind::RightCurly) {
                     let stmt = self.handle_statements()?;
                     statments.push(stmt);
                 }
-                self.expect_and_consume(&Kind::RightBrace, "BlockStatement")?;
+                self.expect_and_consume(&Kind::RightCurly, "BlockStatement")?;
                 Ok(Stmt::new_block(statments))
             }
 
@@ -225,32 +222,149 @@ impl Parser {
 
     fn handle_primaries(&mut self) -> Result<Expr, ParserError> {
         let current = self.current_token.clone();
+        self.next_token();
         match current.get_kind() {
-            Kind::Number(num) => {
-                self.next_token();
-                Ok(Expr::new_literal(Value::new_number(num)))
-            }
-            Kind::String(idx) => {
-                self.next_token();
-                Ok(Expr::new_literal(Value::new_string(idx)))
-            }
-            Kind::Identifier(idx) => {
-                self.next_token();
-                Ok(Expr::new_variable(idx))
-            }
-            Kind::True => {
-                self.next_token();
-                Ok(Expr::new_literal(Value::new_boolean(&true)))
-            }
-            Kind::False => {
-                self.next_token();
-                Ok(Expr::new_literal(Value::new_boolean(&false)))
-            }
+            Kind::Number(num) => Ok(Expr::new_literal(Value::new_number(num))),
+            Kind::String(idx) => Ok(Expr::new_literal(Value::new_string(idx))),
+            Kind::Identifier(idx) => Ok(Expr::new_variable(idx)),
+            Kind::True => Ok(Expr::new_literal(Value::new_boolean(&true))),
+            Kind::False => Ok(Expr::new_literal(Value::new_boolean(&false))),
+            Kind::Null => Ok(Expr::new_literal(Value::new_null())),
+            Kind::Undefined => Ok(Expr::new_literal(Value::new_undefined())),
             Kind::LeftParen => {
-                self.next_token(); // consume '('
+                // immediate right paren - we're in arrow land. grouping needs guts
+                if self.current_token.is_kind(&Kind::RightParen) {
+                    self.next_token();
+                    self.expect_and_consume(&Kind::Arrow, "ArrowFunction")?;
+                    let raw_body = self.handle_statements()?;
+                    let body = if let Stmt::Expression(expr) = raw_body {
+                        ArrowFunctionReturn::Expr(expr)
+                    } else {
+                        ArrowFunctionReturn::Stmt(Box::new(raw_body))
+                    };
+
+                    return Ok(Expr::new_literal(Value::new_arrow_function(vec![], body)));
+                }
+
                 let expr = self.handle_expressions()?;
-                self.expect_and_consume(&Kind::RightParen, "Expression")?;
-                Ok(Expr::new_grouping(expr))
+                // comma separator means arrow land
+                if self.current_token.is_kind(&Kind::Comma) {
+                    let mut args = Vec::with_capacity(8);
+                    args.push(expr);
+                    while self.current_token.is_kind(&Kind::Comma) {
+                        self.next_token();
+                        let param = self.handle_expressions()?;
+                        args.push(param);
+                    }
+                    self.expect_and_consume(&Kind::RightParen, "ArrowFunction")?;
+                    self.expect_and_consume(&Kind::Arrow, "ArrowFunction")?;
+
+                    let body = if self.current_token.is_kind(&Kind::LeftCurly) {
+                        let stmt = self.handle_statements()?;
+                        ArrowFunctionReturn::Stmt(Box::new(stmt))
+                    } else {
+                        let expr = self.handle_expressions()?;
+                        ArrowFunctionReturn::Expr(Box::new(expr))
+                    };
+
+                    Ok(Expr::new_literal(Value::new_arrow_function(args, body)))
+                } else {
+                    self.expect_and_consume(&Kind::RightParen, "Expression")?;
+                    // if next token is an arrow we're in arrow land
+                    if self.current_token.is_kind(&Kind::Arrow) {
+                        let raw_body = self.handle_statements()?;
+                        let body = if let Stmt::Expression(expr) = raw_body {
+                            ArrowFunctionReturn::Expr(expr)
+                        } else {
+                            ArrowFunctionReturn::Stmt(Box::new(raw_body))
+                        };
+
+                        return Ok(Expr::new_literal(Value::new_arrow_function(
+                            vec![expr; 1],
+                            body,
+                        )));
+                    }
+                    // otherwise its just a parenthetical
+                    Ok(Expr::new_grouping(expr))
+                }
+            }
+            Kind::LeftSquare => {
+                if self.current_token.is_kind(&Kind::RightSquare) {
+                    self.next_token();
+                    return Ok(Expr::new_literal(Value::new_array(vec![])));
+                }
+                // js ecosystem typically frowns on this many arguments
+                let mut expressions = Vec::with_capacity(6);
+                let expr = self.handle_expressions()?;
+                expressions.push(expr);
+                while self.current_token.is_kind(&Kind::Comma) {
+                    self.next_token();
+                    let expr = self.handle_expressions()?;
+                    expressions.push(expr);
+                }
+
+                self.expect_and_consume(&Kind::RightSquare, "ArrayExpression")?;
+                Ok(Expr::new_literal(Value::new_array(expressions)))
+            }
+            Kind::LeftCurly => {
+                if self.current_token.is_kind(&Kind::RightCurly) {
+                    self.next_token();
+                    return Ok(Expr::new_literal(Value::new_object(vec![])));
+                }
+
+                let mut pairs = Vec::with_capacity(8);
+
+                loop {
+                    let key = self.handle_primaries()?;
+                    let key_index = if let Expr::Literal(Value::String(idx)) = key {
+                        idx
+                    } else if let Expr::Variable(idx) = key {
+                        idx
+                    } else {
+                        return Err(ParserError::new("Object literal key must be a string"));
+                    };
+                    self.expect_and_consume(&Kind::Colon, "ObjectExpression")?;
+                    let value = self.handle_expressions()?;
+                    pairs.push((key_index, value));
+
+                    if !self.current_token.is_kind(&Kind::Comma) {
+                        break;
+                    }
+                    self.next_token();
+                }
+
+                self.expect_and_consume(&Kind::RightCurly, "ObjectExpression")?;
+                return Ok(Expr::new_literal(Value::new_object(pairs)));
+            }
+            Kind::Function => {
+                // weird literal function expression syntax
+                self.next_token();
+                let ident = if self.current_token.is_kind(&Kind::LeftParen) {
+                    None
+                } else {
+                    let expr = self.handle_expressions()?;
+                    Some(expr)
+                };
+                self.expect_and_consume(&Kind::LeftParen, "FunctionExpression")?;
+
+                let parameters = if self.current_token.is_kind(&Kind::RightParen) {
+                    vec![]
+                } else {
+                    let mut params = vec![];
+                    let first_param = self.handle_expressions()?;
+                    params.push(first_param);
+                    while self.current_token.is_kind(&Kind::Comma) {
+                        self.next_token();
+                        let param = self.handle_expressions()?;
+                        params.push(param);
+                    }
+                    params
+                };
+                self.expect_and_consume(&Kind::RightParen, "FunctionExpression")?;
+                let body = self.handle_statements()?;
+                Ok(Expr::new_literal(Value::new_function(
+                    ident, parameters, body,
+                )))
             }
             token => Err(ParserError::new(&format!("Unexpected token: {:?}", token))),
         }

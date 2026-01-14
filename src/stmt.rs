@@ -88,7 +88,7 @@ impl fmt::Display for Stmt {
 }
 
 impl Stmt {
-    fn fmt_indented(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+    pub fn fmt_indented(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
         let indent_str = "  ".repeat(indent);
 
         match self {
