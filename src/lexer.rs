@@ -1,13 +1,8 @@
+use crate::token::{Kind, Token, get_keyword};
 use std::{iter::Peekable, str::Chars};
 
-use crate::{
-    global::SharedContext,
-    token::{Kind, Token},
-};
-
 #[derive(Debug)]
-pub struct Lexer<'a, 'b> {
-    context: &'b mut SharedContext,
+pub struct Lexer<'a> {
     current_char: char,
     current_column: usize,
     errors: Vec<LexerError>,
@@ -18,12 +13,11 @@ pub struct Lexer<'a, 'b> {
     tokens: Vec<Token>,
 }
 
-impl<'a, 'b> Lexer<'a, 'b> {
-    pub fn new(context: &'b mut SharedContext, source: &'a str) -> Self {
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a str) -> Self {
         let mut chars = source.chars().peekable();
         let first_char = chars.next().unwrap_or('\0');
         Self {
-            context,
             current_column: 0,
             current_char: first_char.clone(),
             errors: vec![],
@@ -58,14 +52,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
                             _ => break,
                         }
                     }
-                    let number = digit_value.parse::<f64>();
-                    match number {
-                        Ok(num) => self.add_token(Kind::Number(num)),
-                        Err(e) => {
-                            eprintln!("{e}");
-                            self.report_error("f64 failed to parse");
-                        }
-                    }
+                    self.add_token(Kind::Number);
                 }
 
                 // identifier
@@ -81,52 +68,11 @@ impl<'a, 'b> Lexer<'a, 'b> {
                         }
                     }
 
-                    match ident.as_str() {
-                        "let" => {
-                            self.add_token(Kind::Let);
-                        }
-                        "const" => {
-                            self.add_token(Kind::Const);
-                        }
-                        "function" => {
-                            self.add_token(Kind::Function);
-                        }
-                        "return" => {
-                            self.add_token(Kind::Return);
-                        }
-                        "if" => {
-                            self.add_token(Kind::If);
-                        }
-                        "else" => {
-                            self.add_token(Kind::Else);
-                        }
-                        "var" => {
-                            self.add_token(Kind::Var);
-                        }
-                        "break" => {
-                            self.add_token(Kind::Break);
-                        }
-                        "continue" => {
-                            self.add_token(Kind::Continue);
-                        }
-                        "while" => {
-                            self.add_token(Kind::While);
-                        }
-                        "true" => {
-                            self.add_token(Kind::True);
-                        }
-                        "false" => {
-                            self.add_token(Kind::False);
-                        }
-                        "for" => {
-                            self.add_token(Kind::For);
-                        }
-                        "null" => self.add_token(Kind::Null),
-                        "undefined" => self.add_token(Kind::Undefined),
-                        _ => {
-                            let idx = self.context.string_pool.get_or_intern(&ident);
-                            self.add_token(Kind::Identifier(idx))
-                        }
+                    let maybe_keyword = get_keyword(&ident);
+                    if let Some(kind) = maybe_keyword {
+                        self.add_token(kind);
+                    } else {
+                        self.add_token(Kind::Identifier);
                     }
                 }
 
@@ -141,7 +87,6 @@ impl<'a, 'b> Lexer<'a, 'b> {
                     self.next_char();
                 }
                 ' ' | '\t' => {
-                    self.current_column += 1;
                     self.next_char();
                 }
                 '+' => {
@@ -311,8 +256,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             self.next_char();
         }
         if !self.had_error {
-            let idx = self.context.string_pool.get_or_intern(&string);
-            self.add_token(Kind::String(idx));
+            self.add_token(Kind::String);
             self.next_char();
         }
     }

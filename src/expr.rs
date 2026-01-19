@@ -3,9 +3,10 @@ use std::fmt;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
-    global::SharedContext,
+    Interpreter,
+    span::Span,
     token::{Kind, Token},
-    value::Value,
+    values::JSValue,
 };
 
 #[derive(Clone, Debug)]
@@ -13,70 +14,96 @@ pub enum Expr {
     Assignment {
         identifier: Box<Expr>,
         right: Box<Expr>,
+        span: Span,
     },
     Binary {
         operator: Token,
         left: Box<Expr>,
         right: Box<Expr>,
+        span: Span,
     },
-    Grouping(Box<Expr>),
-    Literal(Value),
+    Grouping {
+        expr: Box<Expr>,
+        span: Span,
+    },
+    Literal {
+        value: JSValue,
+        span: Span,
+    },
     Unary {
         operator: Token,
         right: Box<Expr>,
+        span: Span,
     },
-    Variable(SymbolU32),
+    Variable {
+        string_index: SymbolU32,
+        span: Span,
+    },
 }
 
 impl Expr {
-    pub fn new_literal(value: Value) -> Self {
-        Self::Literal(value)
+    pub fn new_literal(value: JSValue, span: Span) -> Self {
+        Self::Literal { value, span }
     }
 
-    pub fn new_grouping(expr: Expr) -> Self {
-        Self::Grouping(Box::new(expr))
-    }
-
-    pub fn new_variable(value: &SymbolU32) -> Self {
-        Self::Variable(*value)
-    }
-
-    pub fn new_unary(operator: Token, right: Expr) -> Self {
-        Self::Unary {
-            operator,
-            right: Box::new(right),
+    pub fn new_grouping(expr: Expr, span: Span) -> Self {
+        Self::Grouping {
+            expr: Box::new(expr),
+            span,
         }
     }
 
-    pub fn new_binary(operator: Token, left: Expr, right: Expr) -> Self {
+    pub fn new_variable(value: &SymbolU32, span: Span) -> Self {
+        Self::Variable {
+            string_index: *value,
+            span,
+        }
+    }
+
+    pub fn new_unary(operator: Token, right: Expr, span: Span) -> Self {
+        Self::Unary {
+            operator,
+            right: Box::new(right),
+            span,
+        }
+    }
+
+    pub fn new_binary(operator: Token, left: Expr, right: Expr, span: Span) -> Self {
         Self::Binary {
             operator,
             left: Box::new(left),
             right: Box::new(right),
+            span,
         }
     }
 
-    pub fn new_assignment(identifier: Expr, right: Expr) -> Self {
+    pub fn new_assignment(identifier: Expr, right: Expr, span: Span) -> Self {
         Self::Assignment {
             identifier: Box::new(identifier),
             right: Box::new(right),
+            span,
         }
     }
 
-    pub fn evaluate(&self, context: &mut SharedContext) -> Value {
+    pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSValue {
         match self {
-            Self::Literal(value) => value.clone(),
-            Self::Unary { operator, right } => {
-                let right = right.evaluate(context);
+            Self::Literal { value, span: _ } => value.clone(),
+            Self::Unary {
+                operator,
+                right,
+                span: _,
+            } => {
+                let right = right.evaluate(interpreter);
                 match operator.get_kind() {
                     Kind::Bang => {
-                        let val_as_bool = right.convert_to_boolean(context);
-                        Value::Boolean(!val_as_bool)
+                        let val_as_bool = right.to_boolean();
+                        let negated = !val_as_bool;
+                        JSValue::new_boolean(&negated)
                     }
-                    Kind::Minus => {
-                        let val_as_number = right.convert_to_number(context);
-                        Value::Number(-val_as_number)
-                    }
+                    // Kind::Minus => {
+                    //     let val_as_number = right.convert_to_number();
+                    //     Value::Number(-val_as_number)
+                    // }
                     _ => panic!("Invalid unary operation: {:?}", operator.get_kind()),
                 }
             }
@@ -84,9 +111,15 @@ impl Expr {
                 operator,
                 left,
                 right,
+                span,
             } => {
-                let left = left.evaluate(context);
-                let right = right.evaluate(context);
+                let left = left.evaluate(interpreter);
+                let right = right.evaluate(interpreter);
+                // if left.is_same_variant(&right) {
+                //     match operator.get_kind() {
+                //         _ => panic!("fuck javascript"),
+                //     }
+                // }
                 panic!("Fuck javascript gdi")
             }
             _ => panic!("the disco"),
@@ -97,7 +130,11 @@ impl Expr {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Assignment { identifier, right } => {
+            Expr::Assignment {
+                identifier,
+                right,
+                span: _,
+            } => {
                 write!(f, "Assignment({} = {})", identifier, right)
             }
 
@@ -105,24 +142,32 @@ impl fmt::Display for Expr {
                 operator,
                 left,
                 right,
+                span: _,
             } => {
                 write!(f, "Binary({}, {:?}, {})", left, operator, right)
             }
 
-            Expr::Grouping(expr) => {
+            Expr::Grouping { expr, span: _ } => {
                 write!(f, "Grouping({})", expr)
             }
 
-            Expr::Literal(value) => {
-                write!(f, "Literal({})", value)
+            Expr::Literal { value, span: _ } => {
+                write!(f, "Literal({:?})", value)
             }
 
-            Expr::Unary { operator, right } => {
+            Expr::Unary {
+                operator,
+                right,
+                span: _,
+            } => {
                 write!(f, "Unary({:?} {})", operator, right)
             }
 
-            Expr::Variable(id) => {
-                write!(f, "Variable({:?})", id)
+            Expr::Variable {
+                string_index,
+                span: _,
+            } => {
+                write!(f, "Variable({:?})", string_index)
             }
         }
     }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{expr::Expr, global::SharedContext, value::Value};
+use crate::{Interpreter, expr::Expr, values::JSValue};
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
@@ -94,10 +94,10 @@ impl Stmt {
         }
     }
 
-    pub fn evaluate(&self, context: &mut SharedContext) -> Value {
+    pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSValue {
         match self {
-            Self::Expression(expr) => expr.evaluate(context),
-            _ => panic!("The disco"),
+            Self::Expression(expr) => expr.evaluate(interpreter),
+            _ => JSValue::Undefined,
         }
     }
 }
