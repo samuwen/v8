@@ -1,27 +1,30 @@
 use std::vec::IntoIter;
 
 use crate::{
+    Interpreter,
     expr::Expr,
-    global::{get_or_intern_string, get_source_at_span},
+    global::get_or_intern_string,
     stmt::Stmt,
     token::{Kind, Token},
     values::{ArrowFunctionReturn, JSValue},
 };
 
-pub struct Parser {
+pub struct Parser<'a> {
     current_token: Token,
     errors: Vec<ParserError>,
     tokens: IntoIter<Token>,
+    interpreter: &'a mut Interpreter,
 }
 
-impl Parser {
-    pub fn new(token_list: Vec<Token>) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(token_list: Vec<Token>, interpreter: &'a mut Interpreter) -> Self {
         let mut iter = token_list.into_iter();
         let first_token = iter.next().unwrap_or(Token::new_eof());
         Self {
             current_token: first_token,
             errors: vec![],
             tokens: iter,
+            interpreter,
         }
     }
 
@@ -275,7 +278,10 @@ impl Parser {
         let current = self.current_token.clone();
         let current_span = current.get_span();
         self.next_token();
-        let source_value = get_source_at_span(&current_span).to_string();
+        let source_value = self
+            .interpreter
+            .get_source_at_span(&current_span)
+            .to_string();
         match current.get_kind() {
             Kind::Number => {
                 let num = source_value
@@ -292,7 +298,10 @@ impl Parser {
                 Ok(Expr::new_variable(&idx, current_span))
             }
             Kind::True => Ok(Expr::new_literal(JSValue::new_boolean(&true), current_span)),
-            Kind::False => Ok(Expr::new_literal(JSValue::new_boolean(&false), current_span)),
+            Kind::False => Ok(Expr::new_literal(
+                JSValue::new_boolean(&false),
+                current_span,
+            )),
             Kind::Null => Ok(Expr::new_literal(JSValue::new_null(), current_span)),
             Kind::Undefined => Ok(Expr::new_literal(JSValue::new_undefined(), current_span)),
             Kind::LeftParen => {
@@ -382,10 +391,13 @@ impl Parser {
             Kind::LeftCurly => {
                 if self.current_token.is_kind(&Kind::RightCurly) {
                     self.next_token();
-                    return Ok(Expr::new_literal(JSValue::new_object(vec![]), current_span));
+                    return Ok(Expr::new_literal(
+                        JSValue::new_object(None, self.interpreter),
+                        current_span,
+                    ));
                 }
 
-                let mut pairs = Vec::with_capacity(8);
+                // let mut pairs = Vec::with_capacity(8);
 
                 // loop {
                 //     let key = self.handle_primaries()?;
@@ -415,7 +427,10 @@ impl Parser {
                 // }
 
                 self.expect_and_consume(&Kind::RightCurly, "ObjectExpression")?;
-                return Ok(Expr::new_literal(JSValue::new_object(pairs), current_span));
+                return Ok(Expr::new_literal(
+                    JSValue::new_object(None, self.interpreter),
+                    current_span,
+                ));
             }
             Kind::Function => {
                 // weird literal function expression syntax

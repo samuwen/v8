@@ -1,7 +1,4 @@
-use crate::{
-    global::set_source_string, heap::Heap, lexer::Lexer, parser::Parser, token::Token,
-    values::JSObject,
-};
+use crate::{heap::Heap, lexer::Lexer, parser::Parser, span::Span, token::Token, values::JSObject};
 
 mod completion_record;
 mod errors;
@@ -31,7 +28,7 @@ impl Interpreter {
     pub fn interpret(&mut self) -> Result<(), String> {
         let tokens = self.lex(&self.source.clone())?;
 
-        let mut parser = Parser::new(tokens);
+        let mut parser = Parser::new(tokens, self);
         let statements = parser.parse();
 
         for statement in statements {
@@ -47,7 +44,6 @@ impl Interpreter {
     }
 
     fn lex(&mut self, source: &str) -> Result<Vec<Token>, String> {
-        set_source_string(source);
         let mut lexer = Lexer::new(source);
         let tokens = lexer.lex();
 
@@ -60,5 +56,10 @@ impl Interpreter {
             return Err(String::from("Lexer failure. Aborting"));
         }
         Ok(tokens)
+    }
+
+    fn get_source_at_span(&self, span: &Span) -> String {
+        let result = &self.source[span.get_as_range()];
+        result.to_string()
     }
 }

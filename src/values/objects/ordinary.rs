@@ -4,26 +4,21 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
-    values::{
-        JSResult, JSValue,
-        objects::{JSObject, ObjectProperty},
-    },
+    values::{JSResult, JSValue, objects::ObjectProperty},
 };
 
 #[derive(Clone, Debug)]
 pub struct OrdinaryObject {
     extensible: bool,
-    name: SymbolU32,
     prototype: Option<usize>,
     property_map: HashMap<SymbolU32, ObjectProperty>,
 }
 
 impl OrdinaryObject {
-    pub fn new(ident: SymbolU32, prototype: Option<usize>) -> Self {
+    pub fn new(prototype: Option<usize>) -> Self {
         let map = HashMap::new();
         Self {
             extensible: true,
-            name: ident,
             prototype,
             property_map: map,
         }
@@ -116,77 +111,82 @@ impl OrdinaryObject {
         }
     }
 
-    pub fn set(&mut self, key: &SymbolU32, value: &JSValue, receiver: &JSValue) -> JSResult<bool> {
-        todo!()
-        // let own_desc = self.get_own_property(key)?;
-        // let own_desc = if let None = own_desc {
-        //     let parent = self.get_prototype_of();
-        //     match parent {
-        //         Some(proto) => {
-        //             return proto.set(key, value, receiver);
-        //         }
-        //         None => &ObjectProperty::Data {
-        //             value: JSValue::Undefined,
-        //             writable: true,
-        //             enumerable: true,
-        //             configurable: true,
-        //         },
-        //     }
-        // } else {
-        //     own_desc.unwrap()
-        // };
+    pub fn set(
+        &mut self,
+        key: &SymbolU32,
+        value: &JSValue,
+        receiver: &JSValue,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<bool> {
+        let own_desc = self.get_own_property(key)?;
+        let own_desc = if let None = own_desc {
+            let parent = self.get_prototype_of();
+            if let Some(mut proto) = interpreter.heap.get_object_from_option(&parent) {
+                return proto.set(key, value, receiver, interpreter);
+            } else {
+                &ObjectProperty::Data {
+                    value: JSValue::Undefined,
+                    writable: true,
+                    enumerable: true,
+                    configurable: true,
+                }
+            }
+        } else {
+            own_desc.unwrap()
+        };
 
-        // match own_desc {
-        //     ObjectProperty::Data {
-        //         value,
-        //         writable,
-        //         enumerable,
-        //         configurable,
-        //     } => {
-        //         if !*writable {
-        //             return Ok(false);
-        //         }
-        //         match receiver {
-        //             JSValue::Object(receiver) => {
-        //                 let existing_descriptor = receiver.get_own_property(key)?;
-        //                 match existing_descriptor {
-        //                     Some(descriptor) => {
-        //                         if let ObjectProperty::Data {
-        //                             value,
-        //                             writable,
-        //                             enumerable,
-        //                             configurable,
-        //                         } = descriptor
-        //                         {
-        //                             if !writable {
-        //                                 return Ok(false);
-        //                             }
-        //                             let value_desc = ObjectProperty::new_from_value(value.clone());
-        //                             return receiver.define_own_property(key, value_desc);
-        //                         }
-        //                         return Ok(false);
-        //                     }
-        //                     None => {
-        //                         return receiver.create_data_property(key, value);
-        //                     }
-        //                 }
-        //             }
-        //             _ => return Ok(false),
-        //         }
-        //     }
-        //     ObjectProperty::Attribute {
-        //         get,
-        //         set,
-        //         enumerable,
-        //         configurable,
-        //     } => {
-        //         if let Some(setter) = set {
-        //             setter.call(receiver, vec![value]);
-        //             return Ok(true);
-        //         }
-        //         return Ok(false);
-        //     }
-        // }
+        match own_desc {
+            ObjectProperty::Data {
+                value,
+                writable,
+                enumerable: _,
+                configurable: _,
+            } => {
+                if !*writable {
+                    return Ok(false);
+                }
+                match receiver {
+                    JSValue::Object(receiver_id) => {
+                        let mut receiver = interpreter.heap.get_object_from_id(*receiver_id);
+                        let existing_descriptor = receiver.get_own_property(key)?;
+                        match existing_descriptor {
+                            Some(descriptor) => {
+                                if let ObjectProperty::Data {
+                                    value,
+                                    writable,
+                                    enumerable: _,
+                                    configurable: _,
+                                } = descriptor
+                                {
+                                    if !writable {
+                                        return Ok(false);
+                                    }
+                                    let value_desc = ObjectProperty::new_from_value(value.clone());
+                                    return receiver.define_own_property(key, value_desc);
+                                }
+                                return Ok(false);
+                            }
+                            None => {
+                                return receiver.create_data_property(key, value);
+                            }
+                        }
+                    }
+                    _ => return Ok(false),
+                }
+            }
+            ObjectProperty::Attribute {
+                get: _,
+                set,
+                enumerable: _,
+                configurable: _,
+            } => {
+                if let Some(setter) = set {
+                    setter.call(receiver, vec![value]);
+                    return Ok(true);
+                }
+                return Ok(false);
+            }
+        }
     }
 
     pub fn delete(&mut self, key: &SymbolU32) -> JSResult<bool> {

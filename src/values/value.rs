@@ -6,6 +6,7 @@ use std::{
 use string_interner::symbol::SymbolU32;
 
 use crate::{
+    Interpreter,
     completion_record::CompletionRecord,
     errors::JSError,
     expr::Expr,
@@ -42,7 +43,7 @@ pub enum JSValue {
     Symbol { id: usize, description: SymbolU32 },
     Number { data: f64 },
     BigInt,
-    Object(JSObject),
+    Object(usize),
 }
 
 impl JSValue {
@@ -102,8 +103,9 @@ impl JSValue {
         todo!()
     }
 
-    pub fn new_object(pairs: Vec<(SymbolU32, Expr)>) -> Self {
-        todo!()
+    pub fn new_object(prototype: Option<usize>, interpreter: &mut Interpreter) -> Self {
+        let object_id = JSObject::new_ordinary_object(prototype, interpreter);
+        Self::Object(object_id)
     }
 
     pub fn new_string(s: &SymbolU32) -> Self {

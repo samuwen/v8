@@ -17,6 +17,11 @@ pub enum JSObject {
 }
 
 impl JSObject {
+    pub fn new_ordinary_object(prototype: Option<usize>, interpreter: &mut Interpreter) -> usize {
+        let object = JSObject::Ordinary(OrdinaryObject::new(prototype));
+        interpreter.heap.add_new_object(object)
+    }
+
     pub fn get_prototype_of(&self) -> &Option<usize> {
         match self {
             JSObject::Ordinary(ordinary_object) => ordinary_object.get_prototype_of(),
@@ -96,10 +101,20 @@ impl JSObject {
         }
     }
 
-    pub fn set(&mut self, key: &SymbolU32, value: &JSValue, receiver: &JSValue) -> JSResult<bool> {
+    pub fn set(
+        &mut self,
+        key: &SymbolU32,
+        value: &JSValue,
+        receiver: &JSValue,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<bool> {
         match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.set(key, value, receiver),
-            JSObject::Function(function_object) => function_object.set(key, value, receiver),
+            JSObject::Ordinary(ordinary_object) => {
+                ordinary_object.set(key, value, receiver, interpreter)
+            }
+            JSObject::Function(function_object) => {
+                function_object.set(key, value, receiver, interpreter)
+            }
         }
     }
 
