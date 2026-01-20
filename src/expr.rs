@@ -4,9 +4,11 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
+    errors::JSError,
+    global::{get_or_intern_string, get_string_from_pool},
     span::Span,
     token::{Kind, Token},
-    values::JSValue,
+    values::{JSResult, JSValue, add},
 };
 
 #[derive(Clone, Debug)]
@@ -85,20 +87,20 @@ impl Expr {
         }
     }
 
-    pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSValue {
+    pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         match self {
-            Self::Literal { value, span: _ } => value.clone(),
+            Self::Literal { value, span: _ } => Ok(value.clone()),
             Self::Unary {
                 operator,
                 right,
                 span: _,
             } => {
-                let right = right.evaluate(interpreter);
+                let right = right.evaluate(interpreter)?;
                 match operator.get_kind() {
                     Kind::Bang => {
                         let val_as_bool = right.to_boolean();
                         let negated = !val_as_bool;
-                        JSValue::new_boolean(&negated)
+                        Ok(JSValue::new_boolean(&negated))
                     }
                     // Kind::Minus => {
                     //     let val_as_number = right.convert_to_number();
@@ -113,11 +115,33 @@ impl Expr {
                 right,
                 span,
             } => {
-                let left = left.evaluate(interpreter);
-                let right = right.evaluate(interpreter);
+                match operator.get_kind() {
+                    Kind::Plus => {
+                        let left = left.evaluate(interpreter)?;
+                        let right = right.evaluate(interpreter)?;
+                        let left_prim = left.to_primitive(None, interpreter)?;
+                        let right_prim = right.to_primitive(None, interpreter)?;
+                        if left_prim.is_string() || right_prim.is_string() {
+                            let left_str_sym = left_prim.to_string(interpreter)?;
+                            let right_str_sym = right_prim.to_string(interpreter)?;
+                            let left_str = get_string_from_pool(&left_str_sym).unwrap(); // panic should be fine here, programmer error not JS error
+                            let right_str = get_string_from_pool(&right_str_sym).unwrap();
+                            let concatenated = format!("{left_str}{right_str}");
+                            let id = get_or_intern_string(&concatenated);
+                            return Ok(JSValue::new_string(&id));
+                        }
+                        // must be numbers at this point
+                        let l_num = left_prim.to_numeric(interpreter)?;
+                        let r_num = right_prim.to_numeric(interpreter)?;
+                        // assert these are the same type when doing bigints
+                        let result = add(l_num, r_num);
+                        return Ok(JSValue::new_number(&result));
+                    }
+                    _ => panic!("the disco"),
+                }
                 // if left.is_same_variant(&right) {
                 //     match operator.get_kind() {
-                //         _ => panic!("fuck javascript"),
+                //         _ => panic!("fuck javascript")
                 //     }
                 // }
                 panic!("Fuck javascript gdi")

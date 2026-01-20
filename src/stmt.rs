@@ -1,6 +1,10 @@
 use std::fmt;
 
-use crate::{Interpreter, expr::Expr, values::JSValue};
+use crate::{
+    Interpreter,
+    expr::Expr,
+    values::{JSResult, JSValue},
+};
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
@@ -94,10 +98,10 @@ impl Stmt {
         }
     }
 
-    pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSValue {
+    pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         match self {
             Self::Expression(expr) => expr.evaluate(interpreter),
-            _ => JSValue::Undefined,
+            _ => Ok(JSValue::Undefined),
         }
     }
 }

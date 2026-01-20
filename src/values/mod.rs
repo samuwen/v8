@@ -1,6 +1,10 @@
+mod abstracts;
+mod number;
 mod objects;
 mod value;
 
+use abstracts::*;
+pub use number::*;
 pub use objects::JSObject;
 pub use value::*;
 

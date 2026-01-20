@@ -7,6 +7,7 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
+    stmt::Stmt,
     values::{JSResult, JSValue},
 };
 
@@ -17,9 +18,13 @@ pub enum JSObject {
 }
 
 impl JSObject {
-    pub fn new_ordinary_object(prototype: Option<usize>, interpreter: &mut Interpreter) -> usize {
-        let object = JSObject::Ordinary(OrdinaryObject::new(prototype));
-        interpreter.heap.add_new_object(object)
+    pub fn new_ordinary_object(interpreter: &mut Interpreter) -> usize {
+        let object = JSObject::Ordinary(OrdinaryObject::new());
+        interpreter.object_heap.add_new_item(object)
+    }
+
+    pub fn new_function_object(interpreter: &mut Interpreter, call: Box<Stmt>) -> usize {
+        todo!()
     }
 
     pub fn get_prototype_of(&self) -> &Option<usize> {
@@ -126,8 +131,11 @@ impl JSObject {
         todo!()
     }
 
-    pub fn to_primitive(&self) -> JSResult<&JSValue> {
-        todo!()
+    pub fn to_primitive(&self) -> JSResult<JSValue> {
+        match self {
+            JSObject::Ordinary(ordinary_object) => ordinary_object.to_primitive(),
+            JSObject::Function(function_object) => function_object.to_primitive(),
+        }
     }
 }
 

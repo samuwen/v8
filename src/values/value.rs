@@ -1,16 +1,17 @@
 use std::{
+    fmt::{self, Display},
     mem::discriminant,
     sync::{Mutex, OnceLock},
 };
 
-use string_interner::symbol::SymbolU32;
+use string_interner::{Symbol, symbol::SymbolU32};
 
 use crate::{
     Interpreter,
     completion_record::CompletionRecord,
     errors::JSError,
     expr::Expr,
-    global::get_string_from_pool,
+    global::{get_or_intern_string, get_string_from_pool, get_string_from_pool_unchecked},
     stmt::Stmt,
     values::{JSResult, PreferredType, objects::JSObject},
 };
@@ -43,17 +44,21 @@ pub enum JSValue {
     Symbol { id: usize, description: SymbolU32 },
     Number { data: f64 },
     BigInt,
-    Object(usize),
+    Object { object_id: usize },
 }
 
 impl JSValue {
-    pub fn to_primitive(&self, preferred_type: Option<PreferredType>) -> JSResult<JSValue> {
-        // if let JSValue::Object(obj) = self {
-        //     return obj.to_primitive(preferred_type);
-        // }
-
-        // Ok(self.clone())
-        todo!()
+    pub fn to_primitive(
+        &self,
+        preferred_type: Option<PreferredType>,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<&JSValue> {
+        match self {
+            JSValue::Object { object_id } => {
+                todo!()
+            }
+            _ => Ok(self),
+        }
     }
 
     pub fn to_boolean(&self) -> bool {
@@ -72,8 +77,64 @@ impl JSValue {
         }
     }
 
-    pub fn to_numeric(&self) -> CompletionRecord {
+    pub fn to_numeric(&self, interpreter: &mut Interpreter) -> JSResult<f64> {
+        let prim_value = self.to_primitive(Some(PreferredType::Number), interpreter)?;
+        match prim_value {
+            JSValue::BigInt => todo!(),
+            _ => self.to_number(interpreter),
+        }
+    }
+
+    pub fn to_number(&self, interpreter: &mut Interpreter) -> JSResult<f64> {
+        let res = match self {
+            JSValue::Null => 0.0,
+            JSValue::Undefined => f64::NAN,
+            JSValue::Boolean { data } => match data {
+                true => 1.0,
+                false => 0.0,
+            },
+            JSValue::String { data } => JSValue::string_to_number(data)?,
+            JSValue::Symbol {
+                id: _,
+                description: _,
+            }
+            | JSValue::BigInt => {
+                return Err(JSError::new_type_error("unknown"));
+            }
+            JSValue::Number { data } => *data,
+            JSValue::Object { object_id } => {
+                let object = interpreter.object_heap.get_item_from_id(*object_id);
+                let prim_value = object.to_primitive()?;
+                prim_value.to_number(interpreter)?
+            }
+        };
+        Ok(res)
+    }
+
+    pub fn string_to_number(value: &SymbolU32) -> JSResult<f64> {
+        todo!();
+    }
+
+    // might wanna move these elsewhere
+    pub fn string_to_code_points(value: &SymbolU32) -> JSResult<Vec<u32>> {
         todo!()
+    }
+
+    pub fn to_string(&self, interpreter: &mut Interpreter) -> JSResult<SymbolU32> {
+        Ok(match self {
+            JSValue::Null => get_or_intern_string("null"),
+            JSValue::Undefined => get_or_intern_string("undefined"),
+            JSValue::Boolean { data } => get_or_intern_string(&data.to_string()),
+            JSValue::String { data } => *data,
+            JSValue::Symbol { id: _, description } => *description,
+            JSValue::Number { data } => get_or_intern_string(&data.to_string()),
+            JSValue::BigInt => todo!(),
+            JSValue::Object { object_id } => {
+                let object = interpreter.object_heap.get_item_from_id(*object_id);
+                let prim_value = object.to_primitive()?;
+                prim_value.to_string(interpreter)?
+            }
+        })
     }
 
     pub fn is_undefined(&self) -> bool {
@@ -81,39 +142,53 @@ impl JSValue {
     }
 
     pub fn is_object(&self) -> bool {
-        match self {
-            Self::Object(_) => true,
-            _ => false,
-        }
+        discriminant(self) == discriminant(&JSValue::Object { object_id: 0 })
+    }
+
+    pub fn is_string(&self) -> bool {
+        let sym = SymbolU32::try_from_usize(0).unwrap();
+        discriminant(self) == discriminant(&JSValue::String { data: sym })
     }
 
     pub fn new_number(v: &f64) -> Self {
-        todo!()
+        Self::Number { data: *v }
     }
 
     pub fn new_boolean(v: &bool) -> Self {
-        todo!();
+        Self::Boolean { data: *v }
     }
 
     pub fn new_undefined() -> Self {
-        todo!()
+        Self::Undefined
     }
 
     pub fn new_null() -> Self {
-        todo!()
+        Self::Null
     }
 
-    pub fn new_object(prototype: Option<usize>, interpreter: &mut Interpreter) -> Self {
-        let object_id = JSObject::new_ordinary_object(prototype, interpreter);
-        Self::Object(object_id)
+    pub fn new_object(interpreter: &mut Interpreter) -> Self {
+        let object_id = JSObject::new_ordinary_object(interpreter);
+        Self::Object { object_id }
     }
 
     pub fn new_string(s: &SymbolU32) -> Self {
-        todo!()
+        Self::String { data: *s }
     }
 
-    pub fn new_arrow_function(args: Vec<Expr>, body: ArrowFunctionReturn) -> Self {
-        todo!()
+    pub fn new_arrow_function(
+        args: Vec<Expr>,
+        body: ArrowFunctionReturn,
+        interpreter: &mut Interpreter,
+    ) -> Self {
+        match body {
+            ArrowFunctionReturn::Expr(expr) => {
+                let stmt = Box::new(Stmt::new_return(Some(*expr))); // just make it into a return statement
+                todo!()
+            }
+            ArrowFunctionReturn::Stmt(stmt) => {
+                todo!()
+            }
+        }
     }
 
     pub fn new_array(args: Vec<Expr>) -> Self {
@@ -124,23 +199,30 @@ impl JSValue {
         todo!()
     }
 
-    pub fn as_object(&self) -> Option<JSObject> {
-        // if let Self::Object(obj) = self {
-        //     return Some(obj.clone());
-        // }
-        // None
-        todo!()
+    pub fn to_int_32(&self, interpreter: &mut Interpreter) -> JSResult<i32> {
+        let number = self.to_number(interpreter)?;
+        if number.is_infinite() || number == 0.0 || number == -0.0 {
+            return Ok(0);
+        }
+        let int = number.trunc() as i32;
+        let rhs_mod = 2i32.pow(32);
+        let int32bit = int % rhs_mod;
+        if int32bit >= 2i32.pow(31) {
+            return Ok(int32bit - rhs_mod);
+        }
+
+        Ok(int32bit)
     }
 
-    pub fn call(&self, v: JSValue, args: Vec<JSValue>) -> JSResult<JSValue> {
-        // if let Some(obj) = self.as_object() {
-        //     if obj.is_callable() {
-        //         return obj.call(v, args);
-        //     }
-        // }
-        // let error = JSError::new_type_error("unknown");
-        // return Err(error);
-        todo!()
+    pub fn to_uint_32(&self, interpreter: &mut Interpreter) -> JSResult<u32> {
+        let number = self.to_number(interpreter)?;
+        if number.is_infinite() || number == 0.0 || number == -0.0 {
+            return Ok(0);
+        }
+        let int = number.trunc() as u32;
+        let rhs_mod = 2u32.pow(32);
+        let int32bit = int % rhs_mod;
+        Ok(int32bit)
     }
 }
 

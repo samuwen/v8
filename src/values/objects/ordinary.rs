@@ -4,23 +4,26 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
-    values::{JSResult, JSValue, objects::ObjectProperty},
+    values::{
+        JSResult, JSValue,
+        objects::{ObjectProperty, function::FunctionObject},
+    },
 };
 
 #[derive(Clone, Debug)]
 pub struct OrdinaryObject {
     extensible: bool,
     prototype: Option<usize>,
-    property_map: HashMap<SymbolU32, ObjectProperty>,
+    properties: HashMap<SymbolU32, ObjectProperty>,
 }
 
 impl OrdinaryObject {
-    pub fn new(prototype: Option<usize>) -> Self {
+    pub fn new() -> Self {
         let map = HashMap::new();
         Self {
             extensible: true,
-            prototype,
-            property_map: map,
+            prototype: None,
+            properties: map,
         }
     }
 
@@ -46,7 +49,7 @@ impl OrdinaryObject {
     }
 
     pub fn get_own_property(&self, key: &SymbolU32) -> JSResult<Option<&ObjectProperty>> {
-        Ok(self.property_map.get(key))
+        Ok(self.properties.get(key))
     }
 
     pub fn define_own_property(
@@ -55,17 +58,20 @@ impl OrdinaryObject {
         value: ObjectProperty,
     ) -> JSResult<bool> {
         if self.is_extensible() {
-            return Ok(self.property_map.insert(*key, value).is_some());
+            return Ok(self.properties.insert(*key, value).is_some());
         }
         Ok(false)
     }
 
     pub fn has_property(&self, key: &SymbolU32, interpreter: &mut Interpreter) -> JSResult<bool> {
-        let own_prop = self.property_map.contains_key(key);
+        let own_prop = self.properties.contains_key(key);
         if own_prop {
             return Ok(true);
         }
-        if let Some(proto) = interpreter.heap.get_object_from_option(&self.prototype) {
+        if let Some(proto) = interpreter
+            .object_heap
+            .get_item_from_option(&self.prototype)
+        {
             return proto.has_property(key, interpreter);
         }
         Ok(false)
@@ -103,7 +109,7 @@ impl OrdinaryObject {
             },
             None => {
                 let parent = self.get_prototype_of();
-                if let Some(proto) = interpreter.heap.get_object_from_option(&parent) {
+                if let Some(proto) = interpreter.object_heap.get_item_from_option(&parent) {
                     return proto.get(key, receiver, interpreter);
                 }
                 Ok(JSValue::Undefined)
@@ -121,7 +127,7 @@ impl OrdinaryObject {
         let own_desc = self.get_own_property(key)?;
         let own_desc = if let None = own_desc {
             let parent = self.get_prototype_of();
-            if let Some(mut proto) = interpreter.heap.get_object_from_option(&parent) {
+            if let Some(mut proto) = interpreter.object_heap.get_item_from_option(&parent) {
                 return proto.set(key, value, receiver, interpreter);
             } else {
                 &ObjectProperty::Data {
@@ -146,8 +152,10 @@ impl OrdinaryObject {
                     return Ok(false);
                 }
                 match receiver {
-                    JSValue::Object(receiver_id) => {
-                        let mut receiver = interpreter.heap.get_object_from_id(*receiver_id);
+                    JSValue::Object {
+                        object_id: receiver_id,
+                    } => {
+                        let mut receiver = interpreter.object_heap.get_item_from_id(*receiver_id);
                         let existing_descriptor = receiver.get_own_property(key)?;
                         match existing_descriptor {
                             Some(descriptor) => {
@@ -193,7 +201,7 @@ impl OrdinaryObject {
         let desc = self.get_own_property(key)?;
         if let Some(d) = desc {
             if d.is_configurable() {
-                self.property_map.remove(key);
+                self.properties.remove(key);
                 return Ok(true);
             }
         }
@@ -201,9 +209,13 @@ impl OrdinaryObject {
     }
 
     pub fn own_property_keys(&self) -> JSResult<Vec<&SymbolU32>> {
-        let k = self.property_map.keys();
+        let k = self.properties.keys();
         let keys = k.collect();
 
         Ok(keys)
+    }
+
+    pub fn to_primitive(&self) -> JSResult<JSValue> {
+        todo!()
     }
 }

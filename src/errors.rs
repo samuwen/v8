@@ -2,8 +2,9 @@ use string_interner::symbol::SymbolU32;
 
 use crate::global::get_string_from_pool;
 
+#[derive(Clone, Debug)]
 pub struct JSError {
-    message: String,
+    pub message: String,
 }
 
 impl JSError {
@@ -16,6 +17,12 @@ impl JSError {
     pub fn new_type_error(name: &str) -> Self {
         Self {
             message: format!("Uncaught TypeError: {} is not a function", name),
+        }
+    }
+
+    pub fn new_declaration_error(name: &str) -> Self {
+        Self {
+            message: format!("Variable declaration expected."),
         }
     }
 

@@ -155,6 +155,7 @@ fn get_keywords() -> &'static Mutex<HashMap<&'static str, Kind>> {
     m.insert("false", Kind::False);
     m.insert("null", Kind::Null);
     m.insert("undefined", Kind::Undefined);
+    m.insert("infinity", Kind::Number);
     KEYWORDS.get_or_init(|| Mutex::new(m))
 }
 

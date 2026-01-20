@@ -1,17 +1,21 @@
-use std::vec::IntoIter;
+use std::{sync::OnceLock, vec::IntoIter};
+
+use regex::Regex;
 
 use crate::{
     Interpreter,
+    errors::JSError,
     expr::Expr,
-    global::get_or_intern_string,
+    global::{get_or_intern_string, get_string_from_pool},
     stmt::Stmt,
     token::{Kind, Token},
-    values::{ArrowFunctionReturn, JSValue},
+    values::{ArrowFunctionReturn, JSResult, JSValue},
 };
 
 pub struct Parser<'a> {
     current_token: Token,
-    errors: Vec<ParserError>,
+    errors: Vec<JSError>,
+    had_error: bool,
     tokens: IntoIter<Token>,
     interpreter: &'a mut Interpreter,
 }
@@ -23,6 +27,7 @@ impl<'a> Parser<'a> {
         Self {
             current_token: first_token,
             errors: vec![],
+            had_error: false,
             tokens: iter,
             interpreter,
         }
@@ -38,14 +43,15 @@ impl<'a> Parser<'a> {
                 }
                 Err(e) => {
                     eprintln!("{}", e.message);
-                    break;
+                    self.errors.push(e);
+                    self.had_error = true;
                 }
             }
         }
         program
     }
 
-    fn handle_statements(&mut self) -> Result<Stmt, ParserError> {
+    fn handle_statements(&mut self) -> JSResult<Stmt> {
         match self.current_token.get_kind() {
             Kind::Let | Kind::Var | Kind::Const => {
                 let is_mutable = self.current_token.is_kinds(vec![Kind::Let, Kind::Var]);
@@ -181,21 +187,20 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn handle_expressions(&mut self) -> Result<Expr, ParserError> {
+    fn handle_expressions(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_equality()?;
         while self.current_token.is_kind(&Kind::Equals) {
             let operator_span = self.current_token.get_span();
             self.next_token();
             let right_side_span = self.current_token.get_span();
             let expression_span = operator_span.concatenate(&right_side_span);
-            self.next_token();
             let right = self.handle_expressions()?;
             left = Expr::new_assignment(left, right, expression_span);
         }
         Ok(left)
     }
 
-    fn handle_equality(&mut self) -> Result<Expr, ParserError> {
+    fn handle_equality(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_comparisons()?;
         while self
             .current_token
@@ -212,7 +217,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn handle_comparisons(&mut self) -> Result<Expr, ParserError> {
+    fn handle_comparisons(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_terms()?;
         while self
             .current_token
@@ -229,7 +234,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn handle_terms(&mut self) -> Result<Expr, ParserError> {
+    fn handle_terms(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_factors()?;
         while self.current_token.is_kinds(vec![Kind::Plus, Kind::Minus]) {
             let operator = self.current_token.clone();
@@ -243,7 +248,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn handle_factors(&mut self) -> Result<Expr, ParserError> {
+    fn handle_factors(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_unaries()?;
         while self.current_token.is_kinds(vec![Kind::Star, Kind::Slash]) {
             let operator = self.current_token.clone();
@@ -257,7 +262,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn handle_unaries(&mut self) -> Result<Expr, ParserError> {
+    fn handle_unaries(&mut self) -> JSResult<Expr> {
         let mut expr = self.handle_primaries()?;
         while self
             .current_token
@@ -274,7 +279,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn handle_primaries(&mut self) -> Result<Expr, ParserError> {
+    fn handle_primaries(&mut self) -> JSResult<Expr> {
         let current = self.current_token.clone();
         let current_span = current.get_span();
         self.next_token();
@@ -286,7 +291,7 @@ impl<'a> Parser<'a> {
             Kind::Number => {
                 let num = source_value
                     .parse::<f64>()
-                    .map_err(|_| ParserError::new("Invalid number"))?;
+                    .map_err(|_| JSError::new("Invalid number"))?;
                 return Ok(Expr::new_literal(JSValue::new_number(&num), current_span));
             }
             Kind::String => {
@@ -294,6 +299,7 @@ impl<'a> Parser<'a> {
                 Ok(Expr::new_literal(JSValue::new_string(&idx), current_span))
             }
             Kind::Identifier => {
+                check_identifier(&source_value)?;
                 let idx = get_or_intern_string(&source_value);
                 Ok(Expr::new_variable(&idx, current_span))
             }
@@ -317,7 +323,7 @@ impl<'a> Parser<'a> {
                     };
 
                     return Ok(Expr::new_literal(
-                        JSValue::new_arrow_function(vec![], body),
+                        JSValue::new_arrow_function(vec![], body, self.interpreter),
                         current_span,
                     ));
                 }
@@ -344,7 +350,7 @@ impl<'a> Parser<'a> {
                     };
 
                     Ok(Expr::new_literal(
-                        JSValue::new_arrow_function(args, body),
+                        JSValue::new_arrow_function(args, body, self.interpreter),
                         current_span,
                     ))
                 } else {
@@ -359,7 +365,7 @@ impl<'a> Parser<'a> {
                         };
 
                         return Ok(Expr::new_literal(
-                            JSValue::new_arrow_function(vec![expr; 1], body),
+                            JSValue::new_arrow_function(vec![expr; 1], body, self.interpreter),
                             current_span,
                         ));
                     }
@@ -392,7 +398,7 @@ impl<'a> Parser<'a> {
                 if self.current_token.is_kind(&Kind::RightCurly) {
                     self.next_token();
                     return Ok(Expr::new_literal(
-                        JSValue::new_object(None, self.interpreter),
+                        JSValue::new_object(self.interpreter),
                         current_span,
                     ));
                 }
@@ -428,7 +434,7 @@ impl<'a> Parser<'a> {
 
                 self.expect_and_consume(&Kind::RightCurly, "ObjectExpression")?;
                 return Ok(Expr::new_literal(
-                    JSValue::new_object(None, self.interpreter),
+                    JSValue::new_object(self.interpreter),
                     current_span,
                 ));
             }
@@ -463,7 +469,7 @@ impl<'a> Parser<'a> {
                     current_span,
                 ))
             }
-            token => Err(ParserError::new(&format!("Unexpected token: {:?}", token))),
+            token => Err(JSError::new(&format!("Unexpected token: {:?}", token))),
         }
     }
 
@@ -473,32 +479,27 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_and_consume(&mut self, kind: &Kind, caller: &str) -> Result<bool, ParserError> {
+    fn expect_and_consume(&mut self, kind: &Kind, caller: &str) -> JSResult<bool> {
         if self.current_token.is_kind(kind) {
             self.next_token();
             return Ok(true);
         }
-        let error = ParserError::new(&format!("Expected '{:?}' after {}", kind, caller));
+        let error = JSError::new(&format!("Expected '{:?}' after {}", kind, caller));
         Err(error)
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ParserError {
-    message: String,
+static IDENTIFIER_REGEX: OnceLock<Regex> = OnceLock::new();
+
+fn get_ident_regex() -> &'static Regex {
+    IDENTIFIER_REGEX.get_or_init(|| Regex::new("[a-zA-Z_$][a-zA-Z0-9_$]*").unwrap())
 }
 
-impl ParserError {
-    pub fn new(message: &str) -> Self {
-        Self {
-            message: message.to_owned(),
-        }
+fn check_identifier(source: &str) -> JSResult<()> {
+    println!("checking identifier: {source}");
+    let regex = get_ident_regex();
+    if regex.is_match(source) {
+        return Ok(());
     }
-}
-
-impl std::fmt::Display for ParserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let message = format!("[ERROR:PARSER]: {}", self.message);
-        write!(f, "{}", message)
-    }
+    Err(JSError::new("Identifier expected"))
 }

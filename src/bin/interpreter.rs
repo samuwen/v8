@@ -12,8 +12,10 @@ fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
     let mut ctrl_c_once = false;
     let mut interpreter = Interpreter::new();
+    println!("Welcome to v8 0.0.1");
+
     if args.debug {
-        let source = "2 + 2 + 2;";
+        let source = "2 + '2';";
         interpreter.interpret(source).unwrap();
     } else {
         'repl: loop {

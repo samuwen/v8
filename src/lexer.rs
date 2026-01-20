@@ -39,11 +39,9 @@ impl<'a> Lexer<'a> {
             self.start = self.current_column;
             match self.current_char.to_ascii_lowercase() {
                 '0'..='9' => {
-                    let mut digit_value = String::new();
                     loop {
                         match self.current_char.to_ascii_lowercase() {
                             '0'..='9' | '.' => {
-                                digit_value.push(self.current_char);
                                 self.next_char();
                             }
                             '_' => {
@@ -68,7 +66,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
 
-                    let maybe_keyword = get_keyword(&ident);
+                    let maybe_keyword = get_keyword(&ident.to_lowercase());
                     if let Some(kind) = maybe_keyword {
                         self.add_token(kind);
                     } else {
@@ -233,9 +231,9 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_string(&mut self, terminator: char) {
+        self.next_char(); // discard the quote
         self.start = self.current_column;
         let mut string = String::new();
-        self.next_char(); // discard the quote
         while self.current_char != terminator {
             let error_message = format!("Improperly terminated string: {}", string);
             if self.current_char == '\0' {

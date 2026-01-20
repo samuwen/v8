@@ -16,3 +16,8 @@ pub fn get_string_from_pool(sym: &SymbolU32) -> Option<String> {
     let interner = get_interner().lock().unwrap();
     interner.resolve(*sym).map(|s| s.to_owned())
 }
+
+/// same as get_string_from_pool but unwraps the input
+pub fn get_string_from_pool_unchecked(sym: &SymbolU32) -> String {
+    get_string_from_pool(sym).unwrap()
+}

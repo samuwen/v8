@@ -4,32 +4,25 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
+    environment::Environment,
     stmt::Stmt,
     values::{JSResult, JSValue, objects::ObjectProperty},
 };
 
 #[derive(Clone, Debug)]
 pub struct FunctionObject {
-    name: SymbolU32,
     prototype: Option<usize>,
     property_map: HashMap<SymbolU32, ObjectProperty>,
     call: Box<Stmt>, // create the statement wrapper around it before passing it thru
-    environment: SymbolU32, // whenever i figure out lexical scopes
+    environment: Environment,
     formal_parameters: Vec<SymbolU32>,
 }
 
 impl FunctionObject {
-    pub fn new(
-        ident: SymbolU32,
-        prototype: Option<usize>,
-        call: Box<Stmt>,
-        environment: SymbolU32,
-        parameters: Vec<SymbolU32>,
-    ) -> Self {
+    pub fn new(call: Box<Stmt>, environment: Environment, parameters: Vec<SymbolU32>) -> Self {
         let map = HashMap::new();
         Self {
-            name: ident,
-            prototype,
+            prototype: None,
             property_map: map,
             call,
             environment,
@@ -75,7 +68,7 @@ impl FunctionObject {
             return Ok(true);
         }
         if let Some(proto_id) = &self.prototype {
-            let proto = interpreter.heap.get_object_from_id(*proto_id);
+            let proto = interpreter.object_heap.get_item_from_id(*proto_id);
             return proto.has_property(key, interpreter);
         }
         Ok(false)
@@ -113,7 +106,7 @@ impl FunctionObject {
             },
             None => {
                 let parent = self.get_prototype_of();
-                if let Some(proto) = interpreter.heap.get_object_from_option(&parent) {
+                if let Some(proto) = interpreter.object_heap.get_item_from_option(&parent) {
                     return proto.get(key, receiver, interpreter);
                 }
                 Ok(JSValue::Undefined)
@@ -131,7 +124,7 @@ impl FunctionObject {
         let own_desc = self.get_own_property(key)?;
         let own_desc = if let None = own_desc {
             let parent = self.get_prototype_of();
-            if let Some(mut proto) = interpreter.heap.get_object_from_option(&parent) {
+            if let Some(mut proto) = interpreter.object_heap.get_item_from_option(&parent) {
                 return proto.set(key, value, receiver, interpreter);
             } else {
                 &ObjectProperty::Data {
@@ -156,8 +149,10 @@ impl FunctionObject {
                     return Ok(false);
                 }
                 match receiver {
-                    JSValue::Object(receiver_id) => {
-                        let mut receiver = interpreter.heap.get_object_from_id(*receiver_id);
+                    JSValue::Object {
+                        object_id: receiver_id,
+                    } => {
+                        let mut receiver = interpreter.object_heap.get_item_from_id(*receiver_id);
                         let existing_descriptor = receiver.get_own_property(key)?;
                         match existing_descriptor {
                             Some(descriptor) => {
@@ -218,6 +213,10 @@ impl FunctionObject {
     }
 
     pub fn call(&self, _this_argument: &JSValue, _arguments: Vec<&JSValue>) {
+        todo!()
+    }
+
+    pub fn to_primitive(&self) -> JSResult<JSValue> {
         todo!()
     }
 }
