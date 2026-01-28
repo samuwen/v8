@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use log::trace;
 use string_interner::symbol::SymbolU32;
 
 use crate::Interpreter;
@@ -46,5 +47,6 @@ impl Environment {
 
     pub fn add_variable(&mut self, string_id: StringId, variable_id: usize) {
         self.handles.insert(string_id, variable_id);
+        trace!("{:?}", self);
     }
 }

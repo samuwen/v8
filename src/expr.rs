@@ -5,11 +5,10 @@ use string_interner::symbol::SymbolU32;
 use crate::{
     Interpreter,
     errors::JSError,
-    global::{get_or_intern_string, get_string_from_pool},
+    global::get_or_intern_string,
     span::Span,
     token::{Kind, Token},
-    values::{JSResult, JSValue, add},
-    variable::Variable,
+    values::{JSResult, JSValue},
 };
 
 #[derive(Clone, Debug)]
@@ -142,7 +141,7 @@ impl Expr {
                 operator,
                 left,
                 right,
-                span,
+                span: _,
             } => {
                 let left = left.evaluate(interpreter)?;
                 let right = right.evaluate(interpreter)?;
@@ -163,10 +162,37 @@ impl Expr {
             Expr::Assignment {
                 identifier,
                 right,
-                span,
-            } => todo!(),
-            Expr::Grouping { expr, span } => todo!(),
-            Expr::Identifier { string_index, span } => {
+                span: _,
+            } => {
+                let ident_index = if let Expr::Identifier { string_index, span } = &**identifier {
+                    string_index
+                } else {
+                    panic!("Assignment got passed a non-identifier identifier"); // programming error
+                };
+                let rhs = right.evaluate(interpreter)?;
+                let exists = interpreter.get_variable_from_current_environment(*ident_index);
+                match exists {
+                    Some(id) => {
+                        let var = interpreter.get_variable_from_heap(id);
+                        if var.is_mutable() {
+                            var.update_value(rhs.clone())?;
+                            return Ok(rhs);
+                        } else {
+                            return Err(JSError::new(
+                                "Syntax error: Cannot assign to constant variable",
+                            ));
+                        }
+                    }
+                    None => {
+                        return Err(JSError::new("Syntax error: Variable is not initialized"));
+                    }
+                }
+            }
+            Expr::Grouping { expr, span: _ } => Ok(expr.evaluate(interpreter)?),
+            Expr::Identifier {
+                string_index,
+                span: _,
+            } => {
                 let exists = interpreter.get_variable_from_current_environment(*string_index);
                 match exists {
                     Some(id) => {

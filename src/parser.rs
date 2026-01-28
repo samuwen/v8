@@ -205,7 +205,7 @@ impl<'a> Parser<'a> {
 
     fn handle_expressions(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_equality()?;
-        while self.current_token.is_kind(&Kind::Equals) {
+        if self.current_token.is_kind(&Kind::Equals) {
             let operator_span = self.current_token.get_span();
             self.next_token();
             let right_side_span = self.current_token.get_span();

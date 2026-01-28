@@ -16,7 +16,7 @@ fn main() -> Result<()> {
     println!("Welcome to v8 0.0.1");
 
     if args.debugger {
-        let source = "const x = 5;\nx;";
+        let source = "let x = 5;\nx = 6;";
         interpreter.interpret(source).unwrap();
     } else {
         'repl: loop {

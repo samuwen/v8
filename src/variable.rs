@@ -42,4 +42,8 @@ impl Variable {
     pub fn get_value(&self) -> JSValue {
         self.value.clone()
     }
+
+    pub fn is_mutable(&self) -> bool {
+        self.is_mutable
+    }
 }
