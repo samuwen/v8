@@ -16,7 +16,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-d"],
+            "args": ["--debugger"],
             "cwd": "${workspaceFolder}"
         },
         {

@@ -7,9 +7,15 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
+    errors::JSError,
     stmt::Stmt,
-    values::{JSResult, JSValue},
+    values::{JSResult, JSValue, PreferredType},
 };
+
+pub type ObjectId = usize;
+pub type Properties = Vec<(SymbolU32, JSValue)>;
+pub const TO_PRIMITIVE_SYM: &'static str = "@@toPrimitive";
+pub const CALL: &'static str = "call";
 
 #[derive(Clone, Debug)]
 pub enum JSObject {
@@ -18,8 +24,8 @@ pub enum JSObject {
 }
 
 impl JSObject {
-    pub fn new_ordinary_object(interpreter: &mut Interpreter) -> usize {
-        let object = JSObject::Ordinary(OrdinaryObject::new());
+    pub fn new_ordinary_object(properties: Properties, interpreter: &mut Interpreter) -> usize {
+        let object = JSObject::Ordinary(OrdinaryObject::new(properties, interpreter));
         interpreter.object_heap.add_new_item(object)
     }
 
@@ -27,114 +33,31 @@ impl JSObject {
         todo!()
     }
 
-    pub fn get_prototype_of(&self) -> &Option<usize> {
+    pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
         match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.get_prototype_of(),
-            JSObject::Function(function_object) => function_object.get_prototype_of(),
+            JSObject::Ordinary(ordinary_object) => ordinary_object.to_primitive(hint),
+            JSObject::Function(function_object) => function_object.to_primitive(hint),
         }
     }
 
-    pub fn set_prototype_of(&mut self, prototype: Option<usize>) -> JSResult<bool> {
+    pub fn is_function(&self) -> bool {
         match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.set_prototype_of(prototype),
-            JSObject::Function(function_object) => function_object.set_prototype_of(prototype),
+            JSObject::Ordinary(ordinary_object) => false,
+            JSObject::Function(function_object) => true,
         }
     }
 
-    pub fn is_extensible(&self) -> bool {
+    pub fn value_of(&self) -> JSResult<JSValue> {
         match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.is_extensible(),
-            JSObject::Function(function_object) => function_object.is_extensible(),
+            JSObject::Ordinary(ordinary) => self.value_of(),
+            JSObject::Function(function) => todo!(),
         }
     }
 
-    pub fn prevent_extensible(&mut self) -> bool {
+    pub fn to_string(&self) -> JSResult<JSValue> {
         match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.prevent_extensible(),
-            JSObject::Function(function_object) => function_object.prevent_extensible(),
-        }
-    }
-
-    pub fn has_property(&self, key: &SymbolU32, interpreter: &mut Interpreter) -> JSResult<bool> {
-        match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.has_property(key, interpreter),
-            JSObject::Function(function_object) => function_object.has_property(key, interpreter),
-        }
-    }
-
-    pub fn get_own_property(&self, key: &SymbolU32) -> JSResult<Option<&ObjectProperty>> {
-        match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.get_own_property(key),
-            JSObject::Function(function_object) => function_object.get_own_property(key),
-        }
-    }
-
-    pub fn define_own_property(
-        &mut self,
-        key: &SymbolU32,
-        value: ObjectProperty,
-    ) -> JSResult<bool> {
-        match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.define_own_property(key, value),
-            JSObject::Function(function_object) => function_object.define_own_property(key, value),
-        }
-    }
-
-    pub fn delete(&mut self, key: &SymbolU32) -> JSResult<bool> {
-        match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.delete(key),
-            JSObject::Function(function_object) => function_object.delete(key),
-        }
-    }
-
-    pub fn own_property_keys(&mut self) -> JSResult<Vec<&SymbolU32>> {
-        match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.own_property_keys(),
-            JSObject::Function(function_object) => function_object.own_property_keys(),
-        }
-    }
-
-    pub fn get(
-        &self,
-        key: &SymbolU32,
-        receiver: &JSValue,
-        interpreter: &mut Interpreter,
-    ) -> JSResult<JSValue> {
-        match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.get(key, receiver, interpreter),
-            JSObject::Function(function_object) => function_object.get(key, receiver, interpreter),
-        }
-    }
-
-    pub fn set(
-        &mut self,
-        key: &SymbolU32,
-        value: &JSValue,
-        receiver: &JSValue,
-        interpreter: &mut Interpreter,
-    ) -> JSResult<bool> {
-        match self {
-            JSObject::Ordinary(ordinary_object) => {
-                ordinary_object.set(key, value, receiver, interpreter)
-            }
-            JSObject::Function(function_object) => {
-                function_object.set(key, value, receiver, interpreter)
-            }
-        }
-    }
-
-    pub fn create_data_property(&mut self, key: &SymbolU32, value: &JSValue) -> JSResult<bool> {
-        todo!()
-    }
-
-    pub fn call(&self, _value: &JSValue, _arguments: Vec<&JSValue>) -> JSResult<&JSValue> {
-        todo!()
-    }
-
-    pub fn to_primitive(&self) -> JSResult<JSValue> {
-        match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.to_primitive(),
-            JSObject::Function(function_object) => function_object.to_primitive(),
+            JSObject::Ordinary(ordinary) => ordinary.to_string(),
+            JSObject::Function(function) => todo!(),
         }
     }
 }
@@ -179,6 +102,18 @@ impl ObjectProperty {
                 enumerable: _,
                 configurable,
             } => *configurable,
+        }
+    }
+
+    pub fn get_value(&self) -> JSResult<&JSValue> {
+        match self {
+            Self::Data {
+                value,
+                writable: _,
+                enumerable: _,
+                configurable: _,
+            } => return Ok(value),
+            _ => unimplemented!(),
         }
     }
 }

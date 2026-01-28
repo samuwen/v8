@@ -9,6 +9,7 @@ use crate::{
     span::Span,
     token::{Kind, Token},
     values::{JSResult, JSValue, add},
+    variable::Variable,
 };
 
 #[derive(Clone, Debug)]
@@ -37,7 +38,7 @@ pub enum Expr {
         right: Box<Expr>,
         span: Span,
     },
-    Variable {
+    Identifier {
         string_index: SymbolU32,
         span: Span,
     },
@@ -55,8 +56,8 @@ impl Expr {
         }
     }
 
-    pub fn new_variable(value: &SymbolU32, span: Span) -> Self {
-        Self::Variable {
+    pub fn new_identifier(value: &SymbolU32, span: Span) -> Self {
+        Self::Identifier {
             string_index: *value,
             span,
         }
@@ -102,10 +103,38 @@ impl Expr {
                         let negated = !val_as_bool;
                         Ok(JSValue::new_boolean(&negated))
                     }
-                    // Kind::Minus => {
-                    //     let val_as_number = right.convert_to_number();
-                    //     Value::Number(-val_as_number)
-                    // }
+                    Kind::Minus => {
+                        let val_as_number = right.to_numeric(interpreter)?;
+                        Ok(JSValue::new_number(&-val_as_number))
+                    }
+                    Kind::Plus => {
+                        let val_as_number = right.to_numeric(interpreter)?;
+                        Ok(JSValue::new_number(&val_as_number))
+                    }
+                    Kind::Void => Ok(JSValue::new_undefined()),
+                    Kind::Typeof => {
+                        let output = match right {
+                            JSValue::Null => "object",
+                            JSValue::Undefined => "undefined",
+                            JSValue::Boolean { data: _ } => "boolean",
+                            JSValue::String { data: _ } => "string",
+                            JSValue::Symbol {
+                                id: _,
+                                description: _,
+                            } => "symbol",
+                            JSValue::Number { data: _ } => "number",
+                            JSValue::BigInt => "bigint",
+                            JSValue::Object { object_id } => {
+                                let obj = interpreter.object_heap.get_mut(object_id);
+                                match obj.is_function() {
+                                    true => "function",
+                                    false => "object",
+                                }
+                            }
+                        };
+                        let result = get_or_intern_string(output);
+                        Ok(JSValue::String { data: result })
+                    }
                     _ => panic!("Invalid unary operation: {:?}", operator.get_kind()),
                 }
             }
@@ -115,38 +144,40 @@ impl Expr {
                 right,
                 span,
             } => {
+                let left = left.evaluate(interpreter)?;
+                let right = right.evaluate(interpreter)?;
                 match operator.get_kind() {
-                    Kind::Plus => {
-                        let left = left.evaluate(interpreter)?;
-                        let right = right.evaluate(interpreter)?;
-                        let left_prim = left.to_primitive(None, interpreter)?;
-                        let right_prim = right.to_primitive(None, interpreter)?;
-                        if left_prim.is_string() || right_prim.is_string() {
-                            let left_str_sym = left_prim.to_string(interpreter)?;
-                            let right_str_sym = right_prim.to_string(interpreter)?;
-                            let left_str = get_string_from_pool(&left_str_sym).unwrap(); // panic should be fine here, programmer error not JS error
-                            let right_str = get_string_from_pool(&right_str_sym).unwrap();
-                            let concatenated = format!("{left_str}{right_str}");
-                            let id = get_or_intern_string(&concatenated);
-                            return Ok(JSValue::new_string(&id));
-                        }
-                        // must be numbers at this point
-                        let l_num = left_prim.to_numeric(interpreter)?;
-                        let r_num = right_prim.to_numeric(interpreter)?;
-                        // assert these are the same type when doing bigints
-                        let result = add(l_num, r_num);
-                        return Ok(JSValue::new_number(&result));
+                    Kind::Plus | Kind::Minus | Kind::Slash | Kind::Star | Kind::Percent => {
+                        return left.apply_string_or_numeric_binary_operator(
+                            operator,
+                            &right,
+                            interpreter,
+                        );
                     }
-                    _ => panic!("the disco"),
+                    _ => panic!(
+                        "{}",
+                        format!("Unhandled operator: {:?}", operator.get_kind())
+                    ),
                 }
-                // if left.is_same_variant(&right) {
-                //     match operator.get_kind() {
-                //         _ => panic!("fuck javascript")
-                //     }
-                // }
-                panic!("Fuck javascript gdi")
             }
-            _ => panic!("the disco"),
+            Expr::Assignment {
+                identifier,
+                right,
+                span,
+            } => todo!(),
+            Expr::Grouping { expr, span } => todo!(),
+            Expr::Identifier { string_index, span } => {
+                let exists = interpreter.get_variable_from_current_environment(*string_index);
+                match exists {
+                    Some(id) => {
+                        // already exists, so we evaluate the value
+                        let var = interpreter.variable_heap.get_item_from_id(id);
+                        Ok(var.get_value())
+                    }
+                    // doesn't exist yet, this is a declaration / initialization. pass the interned index to the statement
+                    None => Ok(JSValue::new_string(string_index)),
+                }
+            }
         }
     }
 }
@@ -187,11 +218,11 @@ impl fmt::Display for Expr {
                 write!(f, "Unary({:?} {})", operator, right)
             }
 
-            Expr::Variable {
+            Expr::Identifier {
                 string_index,
                 span: _,
             } => {
-                write!(f, "Variable({:?})", string_index)
+                write!(f, "Identifier({:?})", string_index)
             }
         }
     }

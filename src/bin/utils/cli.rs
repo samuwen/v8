@@ -7,4 +7,7 @@ pub struct Args {
     /// Start in debug mode for lexing
     #[arg(short, long)]
     pub debug: bool,
+
+    #[arg(long)]
+    pub debugger: bool,
 }

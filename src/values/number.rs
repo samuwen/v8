@@ -1,10 +1,7 @@
 use core::f64;
-use std::ops::{Neg, Shl};
+use std::ops::Neg;
 
-use crate::{
-    Interpreter,
-    values::{JSValue, abstracts::to_int_32},
-};
+use crate::{Interpreter, values::JSValue};
 
 fn is_even(x: f64) -> bool {
     x % 2.0 == 0.0
@@ -278,15 +275,12 @@ pub fn add(x: f64, y: f64) -> f64 {
     if y.is_infinite() {
         return y;
     }
-    if x == -0.0 && y == -0.0 {
-        return -0.0;
-    }
 
     x + y
 }
 
 pub fn subtract(x: f64, y: f64) -> f64 {
-    unary_minus(add(x, y))
+    add(x, unary_minus(y))
 }
 
 pub fn left_shift(x: f64, y: f64, interpreter: &mut Interpreter) -> i32 {

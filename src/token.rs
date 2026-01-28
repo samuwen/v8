@@ -65,7 +65,10 @@ pub enum Kind {
 
     // operators
     Plus,
+    PlusPlus,
+    PlusEquals,
     Minus,
+    MinusMinus,
     Star,
     Slash,
     Equals,
@@ -84,7 +87,10 @@ pub enum Kind {
     NotEqual,
     Bang,
     LessThan,
+    LessThanOrEquals,
     GreaterThan,
+    GreaterThanOrEquals,
+    Percent,
     Eof,
 }
 
@@ -194,6 +200,21 @@ impl Token {
 
     pub fn get_span(&self) -> Span {
         self.span.clone()
+    }
+
+    pub fn is_statement_starter(&self) -> bool {
+        match self.get_kind() {
+            Kind::Let
+            | Kind::Const
+            | Kind::Var
+            | Kind::If
+            | Kind::For
+            | Kind::While
+            | Kind::Break
+            | Kind::Function
+            | Kind::Continue => true,
+            _ => false,
+        }
     }
 }
 

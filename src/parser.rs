@@ -1,4 +1,4 @@
-use std::{sync::OnceLock, vec::IntoIter};
+use std::{iter::Peekable, sync::OnceLock, vec::IntoIter};
 
 use regex::Regex;
 
@@ -9,6 +9,7 @@ use crate::{
     global::{get_or_intern_string, get_string_from_pool},
     stmt::Stmt,
     token::{Kind, Token},
+    utils::check_identifier,
     values::{ArrowFunctionReturn, JSResult, JSValue},
 };
 
@@ -16,13 +17,13 @@ pub struct Parser<'a> {
     current_token: Token,
     errors: Vec<JSError>,
     had_error: bool,
-    tokens: IntoIter<Token>,
+    tokens: Peekable<IntoIter<Token>>,
     interpreter: &'a mut Interpreter,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(token_list: Vec<Token>, interpreter: &'a mut Interpreter) -> Self {
-        let mut iter = token_list.into_iter();
+        let mut iter = token_list.into_iter().peekable();
         let first_token = iter.next().unwrap_or(Token::new_eof());
         Self {
             current_token: first_token,
@@ -57,8 +58,9 @@ impl<'a> Parser<'a> {
                 let is_mutable = self.current_token.is_kinds(vec![Kind::Let, Kind::Var]);
                 self.next_token();
 
-                let ident = self.handle_expressions()?;
+                let ident = self.handle_primaries()?; // get ident
                 let expr = if self.current_token.is_kind(&Kind::Equals) {
+                    self.next_token(); // consume equals
                     Some(self.handle_expressions()?)
                 } else {
                     None
@@ -91,14 +93,28 @@ impl<'a> Parser<'a> {
             }
 
             Kind::LeftCurly => {
-                self.next_token();
-                let mut statments = vec![];
-                while !self.current_token.is_kind(&Kind::RightCurly) {
-                    let stmt = self.handle_statements()?;
-                    statments.push(stmt);
+                // could be object literal OR block stmt
+                let peek_opt = self.peek();
+                let peek = match peek_opt {
+                    Some(tok) => tok,
+                    None => return Err(JSError::new("'}' expected.")),
+                };
+
+                if peek.is_statement_starter() {
+                    // a statement
+                    self.next_token();
+                    let mut statements = vec![];
+                    while !self.current_token.is_kind(&Kind::RightCurly) {
+                        let stmt = self.handle_statements()?;
+                        statements.push(stmt);
+                    }
+                    self.expect_and_consume(&Kind::RightCurly, "BlockStatement")?;
+                    return Ok(Stmt::new_block(statements));
                 }
-                self.expect_and_consume(&Kind::RightCurly, "BlockStatement")?;
-                Ok(Stmt::new_block(statments))
+
+                // an object
+                let expr = self.handle_expressions()?;
+                return Ok(Stmt::new_expression(expr));
             }
 
             Kind::Return => {
@@ -250,7 +266,10 @@ impl<'a> Parser<'a> {
 
     fn handle_factors(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_unaries()?;
-        while self.current_token.is_kinds(vec![Kind::Star, Kind::Slash]) {
+        while self
+            .current_token
+            .is_kinds(vec![Kind::Star, Kind::Slash, Kind::Percent])
+        {
             let operator = self.current_token.clone();
             let operator_span = operator.get_span();
             self.next_token();
@@ -263,19 +282,22 @@ impl<'a> Parser<'a> {
     }
 
     fn handle_unaries(&mut self) -> JSResult<Expr> {
-        let mut expr = self.handle_primaries()?;
-        while self
-            .current_token
-            .is_kinds(vec![Kind::Minus, Kind::Bang, Kind::Typeof])
-        {
+        if self.current_token.is_kinds(vec![
+            Kind::Minus,
+            Kind::Bang,
+            Kind::Typeof,
+            Kind::Plus,
+            Kind::Void,
+        ]) {
             let operator = self.current_token.clone();
             let operator_span = operator.get_span();
             self.next_token();
             let right_side_span = self.current_token.get_span();
             let expression_span = operator_span.concatenate(&right_side_span);
             let right = self.handle_unaries()?;
-            expr = Expr::new_unary(operator, right, expression_span);
+            return Ok(Expr::new_unary(operator, right, expression_span));
         }
+        let expr = self.handle_primaries()?;
         Ok(expr)
     }
 
@@ -301,7 +323,7 @@ impl<'a> Parser<'a> {
             Kind::Identifier => {
                 check_identifier(&source_value)?;
                 let idx = get_or_intern_string(&source_value);
-                Ok(Expr::new_variable(&idx, current_span))
+                Ok(Expr::new_identifier(&idx, current_span))
             }
             Kind::True => Ok(Expr::new_literal(JSValue::new_boolean(&true), current_span)),
             Kind::False => Ok(Expr::new_literal(
@@ -398,43 +420,37 @@ impl<'a> Parser<'a> {
                 if self.current_token.is_kind(&Kind::RightCurly) {
                     self.next_token();
                     return Ok(Expr::new_literal(
-                        JSValue::new_object(self.interpreter),
+                        JSValue::new_object(vec![], self.interpreter),
                         current_span,
                     ));
                 }
 
-                // let mut pairs = Vec::with_capacity(8);
+                let mut properties = Vec::with_capacity(8);
 
-                // loop {
-                //     let key = self.handle_primaries()?;
-                //     let key_index = if let Expr::Literal {
-                //         value: idx,
-                //         span: _,
-                //     } = key
-                //     {
-                //         idx
-                //     } else if let Expr::Variable {
-                //         string_index: idx,
-                //         span: _,
-                //     } = key
-                //     {
-                //         idx
-                //     } else {
-                //         return Err(ParserError::new("Object literal key must be a string"));
-                //     };
-                //     self.expect_and_consume(&Kind::Colon, "ObjectExpression")?;
-                //     let value = self.handle_expressions()?;
-                //     pairs.push((key_index, value));
+                let key_error = JSError::new("Object literal key must be a string");
+                loop {
+                    let key = match self.current_token.get_kind() {
+                        Kind::Identifier | Kind::String => self
+                            .interpreter
+                            .get_source_at_span(&self.current_token.get_span()),
+                        _ => return Err(key_error),
+                    };
+                    self.next_token();
+                    let key_index = get_or_intern_string(&key);
+                    self.expect_and_consume(&Kind::Colon, "ObjectExpression")?;
+                    let value_expr = self.handle_expressions()?;
+                    let value = value_expr.evaluate(self.interpreter)?;
+                    properties.push((key_index, value));
 
-                //     if !self.current_token.is_kind(&Kind::Comma) {
-                //         break;
-                //     }
-                //     self.next_token();
-                // }
+                    if !self.current_token.is_kind(&Kind::Comma) {
+                        break;
+                    }
+                    self.next_token();
+                }
 
                 self.expect_and_consume(&Kind::RightCurly, "ObjectExpression")?;
                 return Ok(Expr::new_literal(
-                    JSValue::new_object(self.interpreter),
+                    JSValue::new_object(properties, self.interpreter),
                     current_span,
                 ));
             }
@@ -479,6 +495,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn peek(&mut self) -> Option<&Token> {
+        self.tokens.peek()
+    }
+
     fn expect_and_consume(&mut self, kind: &Kind, caller: &str) -> JSResult<bool> {
         if self.current_token.is_kind(kind) {
             self.next_token();
@@ -487,19 +507,4 @@ impl<'a> Parser<'a> {
         let error = JSError::new(&format!("Expected '{:?}' after {}", kind, caller));
         Err(error)
     }
-}
-
-static IDENTIFIER_REGEX: OnceLock<Regex> = OnceLock::new();
-
-fn get_ident_regex() -> &'static Regex {
-    IDENTIFIER_REGEX.get_or_init(|| Regex::new("[a-zA-Z_$][a-zA-Z0-9_$]*").unwrap())
-}
-
-fn check_identifier(source: &str) -> JSResult<()> {
-    println!("checking identifier: {source}");
-    let regex = get_ident_regex();
-    if regex.is_match(source) {
-        return Ok(());
-    }
-    Err(JSError::new("Identifier expected"))
 }

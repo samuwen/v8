@@ -1,35 +1,50 @@
-use crate::counter::Counter;
+use std::collections::HashMap;
+
+use string_interner::symbol::SymbolU32;
+
+use crate::Interpreter;
+
+type EnvironmentId = usize;
+type StringId = SymbolU32;
 
 #[derive(Debug, Clone)]
 pub struct Environment {
-    id: u32,
-    parent_id: Option<u32>,
-    handles: Vec<u32>,
+    parent_id: Option<EnvironmentId>,
+    handles: HashMap<StringId, usize>, // stringID: variableID (maps string names to variable ids)
 }
 
 impl Environment {
-    pub fn new_root() -> Self {
+    pub fn new(parent_id: Option<EnvironmentId>) -> Self {
         Self {
-            id: 0,
-            parent_id: None,
-            handles: vec![],
+            parent_id,
+            handles: HashMap::new(),
         }
     }
 
-    pub fn new(parent_id: u32, counter: &mut Counter) -> Self {
-        let id = counter.get();
-        Self {
-            id,
-            parent_id: Some(parent_id),
-            handles: vec![],
+    pub fn has_variable(&self, string_id: StringId, interpreter: &Interpreter) -> bool {
+        if self.handles.contains_key(&string_id) {
+            return true;
         }
+        if let Some(parent) = self.parent_id {
+            let parent_env = interpreter.environment_heap.get_item_from_id(parent);
+            return parent_env.has_variable(string_id, interpreter);
+        }
+        false
     }
 
-    pub fn add_handle(&mut self, handle: u32) {
-        self.handles.push(handle);
+    pub fn get_variable(&self, string_id: StringId, interpreter: &Interpreter) -> Option<usize> {
+        let maybe_handle = self.handles.get(&string_id);
+        if let Some(handle) = maybe_handle {
+            return Some(*handle);
+        }
+        if let Some(parent) = self.parent_id {
+            let parent_env = interpreter.environment_heap.get_item_from_id(parent);
+            return parent_env.get_variable(string_id, interpreter);
+        }
+        None
     }
 
-    pub fn get_handles(&self) -> &Vec<u32> {
-        &self.handles
+    pub fn add_variable(&mut self, string_id: StringId, variable_id: usize) {
+        self.handles.insert(string_id, variable_id);
     }
 }

@@ -8,14 +8,15 @@ use crate::utils::Args;
 mod utils;
 
 fn main() -> Result<()> {
+    env_logger::init();
     let args = Args::parse();
     let mut rl = DefaultEditor::new()?;
     let mut ctrl_c_once = false;
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::new(args.debug);
     println!("Welcome to v8 0.0.1");
 
-    if args.debug {
-        let source = "2 + '2';";
+    if args.debugger {
+        let source = "const x = 5;\nx;";
         interpreter.interpret(source).unwrap();
     } else {
         'repl: loop {
@@ -25,6 +26,11 @@ fn main() -> Result<()> {
                     if line == ".exit" || line == "exit()" {
                         break 'repl;
                     }
+                    let line = if !line.ends_with(';') {
+                        format!("{line};")
+                    } else {
+                        line
+                    };
                     let res = interpreter.interpret(&line);
                     if let Err(s) = res {
                         println!("ERROR ASSHOLE {}", s);

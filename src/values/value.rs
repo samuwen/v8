@@ -8,12 +8,16 @@ use string_interner::{Symbol, symbol::SymbolU32};
 
 use crate::{
     Interpreter,
-    completion_record::CompletionRecord,
     errors::JSError,
     expr::Expr,
     global::{get_or_intern_string, get_string_from_pool, get_string_from_pool_unchecked},
     stmt::Stmt,
-    values::{JSResult, PreferredType, objects::JSObject},
+    token::{Kind, Token},
+    values::{
+        JSResult, PreferredType, add, divide, multiply,
+        objects::{JSObject, ObjectId, Properties},
+        remainder, subtract,
+    },
 };
 
 static SYMBOL_COUNTER: OnceLock<Mutex<usize>> = OnceLock::new();
@@ -99,12 +103,12 @@ impl JSValue {
                 description: _,
             }
             | JSValue::BigInt => {
-                return Err(JSError::new_type_error("unknown"));
+                return Err(JSError::new_function_type_error("unknown"));
             }
             JSValue::Number { data } => *data,
             JSValue::Object { object_id } => {
-                let object = interpreter.object_heap.get_item_from_id(*object_id);
-                let prim_value = object.to_primitive()?;
+                let object = interpreter.object_heap.get_mut(*object_id);
+                let prim_value = object.to_primitive(PreferredType::Number)?;
                 prim_value.to_number(interpreter)?
             }
         };
@@ -130,8 +134,8 @@ impl JSValue {
             JSValue::Number { data } => get_or_intern_string(&data.to_string()),
             JSValue::BigInt => todo!(),
             JSValue::Object { object_id } => {
-                let object = interpreter.object_heap.get_item_from_id(*object_id);
-                let prim_value = object.to_primitive()?;
+                let object = interpreter.object_heap.get_mut(*object_id);
+                let prim_value = object.to_primitive(PreferredType::String)?;
                 prim_value.to_string(interpreter)?
             }
         })
@@ -146,8 +150,20 @@ impl JSValue {
     }
 
     pub fn is_string(&self) -> bool {
-        let sym = SymbolU32::try_from_usize(0).unwrap();
-        discriminant(self) == discriminant(&JSValue::String { data: sym })
+        match self {
+            Self::String { data: _ } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_symbol(&self) -> bool {
+        match self {
+            Self::Symbol {
+                id: _,
+                description: _,
+            } => true,
+            _ => false,
+        }
     }
 
     pub fn new_number(v: &f64) -> Self {
@@ -166,9 +182,13 @@ impl JSValue {
         Self::Null
     }
 
-    pub fn new_object(interpreter: &mut Interpreter) -> Self {
-        let object_id = JSObject::new_ordinary_object(interpreter);
+    pub fn new_object(properties: Properties, interpreter: &mut Interpreter) -> Self {
+        let object_id = JSObject::new_ordinary_object(properties, interpreter);
         Self::Object { object_id }
+    }
+
+    pub fn object_shallow_copy(id: ObjectId) -> Self {
+        Self::Object { object_id: id }
     }
 
     pub fn new_string(s: &SymbolU32) -> Self {
@@ -223,6 +243,38 @@ impl JSValue {
         let rhs_mod = 2u32.pow(32);
         let int32bit = int % rhs_mod;
         Ok(int32bit)
+    }
+
+    pub fn apply_string_or_numeric_binary_operator(
+        &self,
+        op: &Token,
+        right: &JSValue,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<JSValue> {
+        let left_prim = self.to_primitive(None, interpreter)?;
+        let right_prim = right.to_primitive(None, interpreter)?;
+        if left_prim.is_string() || right_prim.is_string() {
+            let left_str_sym = left_prim.to_string(interpreter)?;
+            let right_str_sym = right_prim.to_string(interpreter)?;
+            let left_str = get_string_from_pool(&left_str_sym).unwrap(); // panic should be fine here, programmer error not JS error
+            let right_str = get_string_from_pool(&right_str_sym).unwrap();
+            let concatenated = format!("{left_str}{right_str}");
+            let id = get_or_intern_string(&concatenated);
+            return Ok(JSValue::new_string(&id));
+        }
+        // must be numbers at this point
+        let l_num = left_prim.to_numeric(interpreter)?;
+        let r_num = right_prim.to_numeric(interpreter)?;
+        // assert these are the same type when doing bigints
+        let result = match op.get_kind() {
+            Kind::Plus => add(l_num, r_num),
+            Kind::Minus => subtract(l_num, r_num),
+            Kind::Star => multiply(l_num, r_num),
+            Kind::Slash => divide(l_num, r_num),
+            Kind::Percent => remainder(l_num, r_num),
+            _ => panic!("the disco"),
+        };
+        Ok(JSValue::new_number(&result))
     }
 }
 

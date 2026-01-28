@@ -88,10 +88,26 @@ impl<'a> Lexer<'a> {
                     self.next_char();
                 }
                 '+' => {
-                    self.add_token_and_advance(Kind::Plus);
+                    if self.check_peeked_char('+') {
+                        self.next_char();
+                        self.add_token_and_advance(Kind::PlusPlus);
+                    } else {
+                        if self.check_peeked_char('=') {
+                            self.next_char();
+                            self.add_token_and_advance(Kind::PlusEquals);
+                        } else {
+                            self.add_token_and_advance(Kind::Plus);
+                        }
+                    }
                 }
                 '-' => {
-                    self.add_token_and_advance(Kind::Minus);
+                    let is_second_minus = self.check_peeked_char('-');
+                    if is_second_minus {
+                        self.next_char();
+                        self.add_token_and_advance(Kind::MinusMinus);
+                    } else {
+                        self.add_token_and_advance(Kind::Minus);
+                    }
                 }
                 '*' => {
                     self.add_token_and_advance(Kind::Star);
@@ -160,16 +176,31 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '<' => {
-                    self.add_token_and_advance(Kind::LessThan);
+                    let is_equals = self.check_peeked_char('=');
+                    if is_equals {
+                        self.next_char();
+                        self.add_token_and_advance(Kind::LessThanOrEquals);
+                    } else {
+                        self.add_token_and_advance(Kind::LessThan);
+                    }
                 }
                 '>' => {
-                    self.add_token_and_advance(Kind::GreaterThan);
+                    let is_equals = self.check_peeked_char('=');
+                    if is_equals {
+                        self.next_char();
+                        self.add_token_and_advance(Kind::GreaterThanOrEquals);
+                    } else {
+                        self.add_token_and_advance(Kind::GreaterThan);
+                    }
                 }
                 '[' => {
                     self.add_token_and_advance(Kind::LeftSquare);
                 }
                 ']' => {
                     self.add_token_and_advance(Kind::RightSquare);
+                }
+                '%' => {
+                    self.add_token_and_advance(Kind::Percent);
                 }
                 '\0' => {
                     self.add_token_and_advance(Kind::Eof);

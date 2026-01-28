@@ -2,8 +2,10 @@ use std::fmt;
 
 use crate::{
     Interpreter,
+    errors::JSError,
     expr::Expr,
     values::{JSResult, JSValue},
+    variable::Variable,
 };
 
 #[derive(Clone, Debug)]
@@ -100,8 +102,51 @@ impl Stmt {
 
     pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         match self {
+            Stmt::Block(stmts) => todo!(),
+            Stmt::Break => todo!(),
+            Stmt::Continue => todo!(),
             Self::Expression(expr) => expr.evaluate(interpreter),
-            _ => Ok(JSValue::Undefined),
+            Stmt::For {
+                initializer,
+                condition,
+                state,
+                body,
+            } => todo!(),
+            Stmt::FunctionDecl {
+                identifier,
+                arguments,
+                body,
+            } => todo!(),
+            Stmt::If {
+                condition,
+                branch_true,
+                branch_false,
+            } => todo!(),
+            Stmt::Return(expr) => todo!(),
+            Stmt::VariableDecl {
+                is_mutable,
+                identifier,
+                initializer,
+            } => {
+                // establish the variable name
+                let ident = identifier.evaluate(interpreter)?;
+                if !ident.is_string() {
+                    return Err(JSError::new("Expected string"));
+                }
+                let str_id = ident.to_string(interpreter)?;
+                // right hand side is either the expr evaluation or undefined
+                let rhs = match initializer {
+                    Some(init_expr) => init_expr.evaluate(interpreter)?,
+                    None => JSValue::Undefined,
+                };
+                // add a new variable to the variable heap
+                let var = Variable::new(*is_mutable, rhs);
+                let var_id = interpreter.add_variable_to_heap(var);
+                interpreter.add_variable_to_current_environment(str_id, var_id);
+
+                Ok(JSValue::Undefined)
+            }
+            Stmt::While { condition, body } => todo!(),
         }
     }
 }
