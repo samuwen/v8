@@ -102,7 +102,12 @@ impl Stmt {
 
     pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         match self {
-            Stmt::Block(stmts) => todo!(),
+            Stmt::Block(stmts) => {
+                for stmt in stmts {
+                    stmt.evaluate(interpreter)?;
+                }
+                Ok(JSValue::Undefined)
+            }
             Stmt::Break => todo!(),
             Stmt::Continue => todo!(),
             Self::Expression(expr) => expr.evaluate(interpreter),
@@ -121,7 +126,17 @@ impl Stmt {
                 condition,
                 branch_true,
                 branch_false,
-            } => todo!(),
+            } => {
+                let evaluated_condition = condition.evaluate(interpreter)?;
+                if evaluated_condition.to_boolean() {
+                    let b_true = branch_true.evaluate(interpreter)?;
+                    return Ok(b_true);
+                } else if let Some(branch_false) = branch_false {
+                    let b_false = branch_false.evaluate(interpreter)?;
+                    return Ok(b_false);
+                }
+                Ok(JSValue::Undefined)
+            }
             Stmt::Return(expr) => todo!(),
             Stmt::VariableDecl {
                 is_mutable,
@@ -146,7 +161,29 @@ impl Stmt {
 
                 Ok(JSValue::Undefined)
             }
-            Stmt::While { condition, body } => todo!(),
+            Stmt::While {
+                condition: raw_condition,
+                body,
+            } => {
+                let mut condition = raw_condition.evaluate(interpreter)?;
+                let mut debug_counter = 0;
+                if !condition.to_boolean() {
+                    return Ok(JSValue::Undefined);
+                }
+                'whilst: loop {
+                    if !condition.to_boolean() {
+                        break 'whilst;
+                    }
+                    if debug_counter > 100 {
+                        break 'whilst;
+                    }
+                    body.evaluate(interpreter)?;
+                    condition = raw_condition.evaluate(interpreter)?;
+
+                    debug_counter += 1;
+                }
+                Ok(JSValue::Undefined)
+            }
         }
     }
 }

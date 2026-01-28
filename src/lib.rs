@@ -3,7 +3,7 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     environment::Environment,
-    global::{get_string_from_pool, get_string_from_pool_unchecked},
+    global::get_string_from_pool_unchecked,
     heap::Heap,
     lexer::Lexer,
     parser::Parser,
@@ -30,7 +30,6 @@ mod variable;
 
 pub struct Interpreter {
     current_environment_handle: usize,
-    debug_mode: bool,
     object_heap: Heap<JSObject>,
     source: String,
     environment_heap: Heap<Environment>,
@@ -38,13 +37,12 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(debug: bool) -> Self {
+    pub fn new() -> Self {
         let mut environment_heap = Heap::new();
         let id = environment_heap.add_new_item(Environment::new(None));
         let variable_heap = Heap::new();
         Self {
             current_environment_handle: id,
-            debug_mode: debug,
             object_heap: Heap::new(),
             source: "".to_owned(), // lil hack
             environment_heap,
@@ -79,11 +77,6 @@ impl Interpreter {
         }
 
         Ok(())
-    }
-
-    pub fn lex_only(&mut self, source: &str) -> Result<(), String> {
-        self.source = source.to_owned();
-        self.lex().map(|_| ())
     }
 
     fn lex(&mut self) -> Result<Vec<Token>, String> {

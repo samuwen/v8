@@ -202,17 +202,17 @@ impl Token {
         self.span.clone()
     }
 
-    pub fn is_statement_starter(&self) -> bool {
+    pub fn is_binary_operator(&self) -> bool {
         match self.get_kind() {
-            Kind::Let
-            | Kind::Const
-            | Kind::Var
-            | Kind::If
-            | Kind::For
-            | Kind::While
-            | Kind::Break
-            | Kind::Function
-            | Kind::Continue => true,
+            Kind::Plus
+            | Kind::Minus
+            | Kind::Slash
+            | Kind::Star
+            | Kind::LessThan
+            | Kind::LessThanOrEquals
+            | Kind::GreaterThan
+            | Kind::GreaterThanOrEquals
+            | Kind::Percent => true,
             _ => false,
         }
     }

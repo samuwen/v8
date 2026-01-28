@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::io::Read;
+
 use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
@@ -12,7 +15,36 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let mut rl = DefaultEditor::new()?;
     let mut ctrl_c_once = false;
-    let mut interpreter = Interpreter::new(args.debug);
+    let mut interpreter = Interpreter::new();
+
+    // we're in file land, don't need the repl
+    if args.path.is_some() {
+        let path = args.path.unwrap();
+        let extension = path.extension();
+        match extension {
+            Some(ext) => {
+                if ext != "js" {
+                    // we dunno what this is so just fail out
+                    std::process::exit(1)
+                }
+            }
+            None => {
+                // we dunno what this is so just fail out
+                std::process::exit(1)
+            }
+        }
+        let mut file =
+            File::open(&path).unwrap_or_else(|_| panic!("Cannot find module {:?}", &path));
+        let mut source = String::new();
+        let res = file.read_to_string(&mut source);
+        if res.is_err() {
+            // we dunno what this is so just fail out
+            std::process::exit(1);
+        }
+        // we have a valid js file that's been read into a string
+        interpreter.interpret(&source);
+        std::process::exit(0);
+    }
     println!("Welcome to v8 0.0.1");
 
     if args.debugger {

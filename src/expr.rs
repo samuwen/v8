@@ -1,5 +1,6 @@
 use std::fmt;
 
+use log::debug;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -145,19 +146,17 @@ impl Expr {
             } => {
                 let left = left.evaluate(interpreter)?;
                 let right = right.evaluate(interpreter)?;
-                match operator.get_kind() {
-                    Kind::Plus | Kind::Minus | Kind::Slash | Kind::Star | Kind::Percent => {
-                        return left.apply_string_or_numeric_binary_operator(
-                            operator,
-                            &right,
-                            interpreter,
-                        );
-                    }
-                    _ => panic!(
-                        "{}",
-                        format!("Unhandled operator: {:?}", operator.get_kind())
-                    ),
+                if operator.is_binary_operator() {
+                    return left.apply_string_or_numeric_binary_operator(
+                        operator,
+                        &right,
+                        interpreter,
+                    );
                 }
+                panic!(
+                    "{}",
+                    format!("Unhandled operator: {:?}", operator.get_kind())
+                );
             }
             Expr::Assignment {
                 identifier,

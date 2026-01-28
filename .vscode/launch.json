@@ -16,7 +16,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--debugger"],
+            "args": ["--debugger", "data/test.js"],
             "cwd": "${workspaceFolder}"
         },
         {

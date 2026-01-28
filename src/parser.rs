@@ -93,28 +93,14 @@ impl<'a> Parser<'a> {
             }
 
             Kind::LeftCurly => {
-                // could be object literal OR block stmt
-                let peek_opt = self.peek();
-                let peek = match peek_opt {
-                    Some(tok) => tok,
-                    None => return Err(JSError::new("'}' expected.")),
-                };
-
-                if peek.is_statement_starter() {
-                    // a statement
-                    self.next_token();
-                    let mut statements = vec![];
-                    while !self.current_token.is_kind(&Kind::RightCurly) {
-                        let stmt = self.handle_statements()?;
-                        statements.push(stmt);
-                    }
-                    self.expect_and_consume(&Kind::RightCurly, "BlockStatement")?;
-                    return Ok(Stmt::new_block(statements));
+                self.next_token();
+                let mut statements = vec![];
+                while !self.current_token.is_kind(&Kind::RightCurly) {
+                    let stmt = self.handle_statements()?;
+                    statements.push(stmt);
                 }
-
-                // an object
-                let expr = self.handle_expressions()?;
-                return Ok(Stmt::new_expression(expr));
+                self.expect_and_consume(&Kind::RightCurly, "BlockStatement")?;
+                return Ok(Stmt::new_block(statements));
             }
 
             Kind::Return => {

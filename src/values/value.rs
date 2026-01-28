@@ -14,7 +14,7 @@ use crate::{
     stmt::Stmt,
     token::{Kind, Token},
     values::{
-        JSResult, PreferredType, add, divide, multiply,
+        JSResult, PreferredType, add, divide, equal, less_than, multiply,
         objects::{JSObject, ObjectId, Properties},
         remainder, subtract,
     },
@@ -272,6 +272,26 @@ impl JSValue {
             Kind::Star => multiply(l_num, r_num),
             Kind::Slash => divide(l_num, r_num),
             Kind::Percent => remainder(l_num, r_num),
+            Kind::LessThan => {
+                let res = less_than(l_num, r_num);
+                return Ok(JSValue::new_boolean(&res));
+            }
+            Kind::LessThanOrEquals => {
+                let lt = less_than(l_num, r_num);
+                let eq = equal(l_num, r_num);
+                let value = lt || eq;
+                return Ok(JSValue::new_boolean(&value));
+            }
+            Kind::GreaterThan => {
+                let res = !less_than(l_num, r_num);
+                return Ok(JSValue::new_boolean(&res));
+            }
+            Kind::GreaterThanOrEquals => {
+                let gt = !less_than(l_num, r_num);
+                let eq = equal(l_num, r_num);
+                let value = gt || eq;
+                return Ok(JSValue::new_boolean(&value));
+            }
             _ => panic!("the disco"),
         };
         Ok(JSValue::new_number(&result))

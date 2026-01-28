@@ -1,2 +1,7 @@
-var b = 5;
-console.log(b);
+let x = 0;
+
+while (x < 10) {
+    x = x + 1;
+}
+
+x;
