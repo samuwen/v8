@@ -1,6 +1,5 @@
 use std::fmt;
 
-
 use crate::{
     Interpreter,
     errors::{ErrorKind, JSError},

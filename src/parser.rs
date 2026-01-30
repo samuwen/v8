@@ -1,6 +1,5 @@
 use std::{iter::Peekable, vec::IntoIter};
 
-
 use crate::{
     Interpreter,
     errors::JSError,
@@ -189,13 +188,27 @@ impl<'a> Parser<'a> {
 
     fn handle_expressions(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_equality()?;
-        if self.current_token.is_kind(&Kind::Equals) {
-            let operator_span = self.current_token.get_span();
+        if self
+            .current_token
+            .is_kinds(vec![Kind::Equals, Kind::PlusEquals])
+        {
+            let op_token = self.current_token.clone();
             self.next_token();
-            let right_side_span = self.current_token.get_span();
-            let expression_span = operator_span.concatenate(&right_side_span);
             let right = self.handle_expressions()?;
-            left = Expr::new_assignment(left, right, expression_span);
+            match op_token.get_kind() {
+                Kind::PlusEquals => {
+                    let right = Expr::new_binary(
+                        Token::new_from_span(Kind::Plus, &op_token.get_span()),
+                        left.clone(),
+                        right,
+                    );
+                    left = Expr::new_assignment(left, right);
+                }
+                Kind::Plus => {
+                    left = Expr::new_assignment(left, right);
+                }
+                _ => unimplemented!(),
+            }
         }
         Ok(left)
     }
@@ -207,12 +220,9 @@ impl<'a> Parser<'a> {
             .is_kinds(vec![Kind::EqualEqual, Kind::NotEqual])
         {
             let operator = self.current_token.clone();
-            let operator_span = operator.get_span();
             self.next_token();
-            let right_side_span = self.current_token.get_span();
-            let expression_span = operator_span.concatenate(&right_side_span);
             let right = self.handle_comparisons()?;
-            left = Expr::new_binary(operator, left, right, expression_span);
+            left = Expr::new_binary(operator, left, right);
         }
         Ok(left)
     }
@@ -226,12 +236,9 @@ impl<'a> Parser<'a> {
             Kind::GreaterThanOrEquals,
         ]) {
             let operator = self.current_token.clone();
-            let operator_span = operator.get_span();
             self.next_token();
-            let right_side_span = self.current_token.get_span();
-            let expression_span = operator_span.concatenate(&right_side_span);
             let right = self.handle_terms()?;
-            left = Expr::new_binary(operator, left, right, expression_span);
+            left = Expr::new_binary(operator, left, right);
         }
         Ok(left)
     }
@@ -240,12 +247,9 @@ impl<'a> Parser<'a> {
         let mut left = self.handle_factors()?;
         while self.current_token.is_kinds(vec![Kind::Plus, Kind::Minus]) {
             let operator = self.current_token.clone();
-            let operator_span = operator.get_span();
             self.next_token();
-            let right_side_span = self.current_token.get_span();
-            let expression_span = operator_span.concatenate(&right_side_span);
             let right = self.handle_factors()?;
-            left = Expr::new_binary(operator, left, right, expression_span);
+            left = Expr::new_binary(operator, left, right);
         }
         Ok(left)
     }
@@ -257,12 +261,9 @@ impl<'a> Parser<'a> {
             .is_kinds(vec![Kind::Star, Kind::Slash, Kind::Percent])
         {
             let operator = self.current_token.clone();
-            let operator_span = operator.get_span();
             self.next_token();
-            let right_side_span = self.current_token.get_span();
-            let expression_span = operator_span.concatenate(&right_side_span);
             let right = self.handle_unaries()?;
-            left = Expr::new_binary(operator, left, right, expression_span);
+            left = Expr::new_binary(operator, left, right);
         }
         Ok(left)
     }
@@ -276,12 +277,9 @@ impl<'a> Parser<'a> {
             Kind::Void,
         ]) {
             let operator = self.current_token.clone();
-            let operator_span = operator.get_span();
             self.next_token();
-            let right_side_span = self.current_token.get_span();
-            let expression_span = operator_span.concatenate(&right_side_span);
             let right = self.handle_unaries()?;
-            return Ok(Expr::new_unary(operator, right, expression_span));
+            return Ok(Expr::new_unary(operator, right));
         }
         let expr = self.handle_primaries()?;
         Ok(expr)
@@ -300,24 +298,21 @@ impl<'a> Parser<'a> {
                 let num = source_value
                     .parse::<f64>()
                     .map_err(|_| JSError::new("Invalid number"))?;
-                return Ok(Expr::new_literal(JSValue::new_number(&num), current_span));
+                return Ok(Expr::new_literal(JSValue::new_number(&num)));
             }
             Kind::String => {
                 let idx = get_or_intern_string(&source_value);
-                Ok(Expr::new_literal(JSValue::new_string(&idx), current_span))
+                Ok(Expr::new_literal(JSValue::new_string(&idx)))
             }
             Kind::Identifier => {
                 check_identifier(&source_value)?;
                 let idx = get_or_intern_string(&source_value);
-                Ok(Expr::new_identifier(&idx, current_span))
+                Ok(Expr::new_identifier(&idx))
             }
-            Kind::True => Ok(Expr::new_literal(JSValue::new_boolean(&true), current_span)),
-            Kind::False => Ok(Expr::new_literal(
-                JSValue::new_boolean(&false),
-                current_span,
-            )),
-            Kind::Null => Ok(Expr::new_literal(JSValue::new_null(), current_span)),
-            Kind::Undefined => Ok(Expr::new_literal(JSValue::new_undefined(), current_span)),
+            Kind::True => Ok(Expr::new_literal(JSValue::new_boolean(&true))),
+            Kind::False => Ok(Expr::new_literal(JSValue::new_boolean(&false))),
+            Kind::Null => Ok(Expr::new_literal(JSValue::new_null())),
+            Kind::Undefined => Ok(Expr::new_literal(JSValue::new_undefined())),
             Kind::LeftParen => {
                 // immediate right paren - we're in arrow land. grouping needs inner content
                 if self.current_token.is_kind(&Kind::RightParen) {
@@ -330,10 +325,11 @@ impl<'a> Parser<'a> {
                         ArrowFunctionReturn::Stmt(Box::new(raw_body))
                     };
 
-                    return Ok(Expr::new_literal(
-                        JSValue::new_arrow_function(vec![], body, self.interpreter),
-                        current_span,
-                    ));
+                    return Ok(Expr::new_literal(JSValue::new_arrow_function(
+                        vec![],
+                        body,
+                        self.interpreter,
+                    )));
                 }
 
                 let expr = self.handle_expressions()?;
@@ -357,10 +353,11 @@ impl<'a> Parser<'a> {
                         ArrowFunctionReturn::Expr(Box::new(expr))
                     };
 
-                    Ok(Expr::new_literal(
-                        JSValue::new_arrow_function(args, body, self.interpreter),
-                        current_span,
-                    ))
+                    Ok(Expr::new_literal(JSValue::new_arrow_function(
+                        args,
+                        body,
+                        self.interpreter,
+                    )))
                 } else {
                     self.expect_and_consume(&Kind::RightParen, "Expression")?;
                     // if next token is an arrow we're in arrow land
@@ -372,19 +369,20 @@ impl<'a> Parser<'a> {
                             ArrowFunctionReturn::Stmt(Box::new(raw_body))
                         };
 
-                        return Ok(Expr::new_literal(
-                            JSValue::new_arrow_function(vec![expr; 1], body, self.interpreter),
-                            current_span,
-                        ));
+                        return Ok(Expr::new_literal(JSValue::new_arrow_function(
+                            vec![expr; 1],
+                            body,
+                            self.interpreter,
+                        )));
                     }
                     // otherwise its just a parenthetical
-                    Ok(Expr::new_grouping(expr, current_span))
+                    Ok(Expr::new_grouping(expr))
                 }
             }
             Kind::LeftSquare => {
                 if self.current_token.is_kind(&Kind::RightSquare) {
                     self.next_token();
-                    return Ok(Expr::new_literal(JSValue::new_array(vec![]), current_span));
+                    return Ok(Expr::new_literal(JSValue::new_array(vec![])));
                 }
                 // js ecosystem typically frowns on this many arguments
                 let mut expressions = Vec::with_capacity(6);
@@ -397,18 +395,15 @@ impl<'a> Parser<'a> {
                 }
 
                 self.expect_and_consume(&Kind::RightSquare, "ArrayExpression")?;
-                Ok(Expr::new_literal(
-                    JSValue::new_array(expressions),
-                    current_span,
-                ))
+                Ok(Expr::new_literal(JSValue::new_array(expressions)))
             }
             Kind::LeftCurly => {
                 if self.current_token.is_kind(&Kind::RightCurly) {
                     self.next_token();
-                    return Ok(Expr::new_literal(
-                        JSValue::new_object(vec![], self.interpreter),
-                        current_span,
-                    ));
+                    return Ok(Expr::new_literal(JSValue::new_object(
+                        vec![],
+                        self.interpreter,
+                    )));
                 }
 
                 let mut properties = Vec::with_capacity(8);
@@ -435,10 +430,10 @@ impl<'a> Parser<'a> {
                 }
 
                 self.expect_and_consume(&Kind::RightCurly, "ObjectExpression")?;
-                return Ok(Expr::new_literal(
-                    JSValue::new_object(properties, self.interpreter),
-                    current_span,
-                ));
+                return Ok(Expr::new_literal(JSValue::new_object(
+                    properties,
+                    self.interpreter,
+                )));
             }
             Kind::Function => {
                 // weird literal function expression syntax
@@ -466,10 +461,9 @@ impl<'a> Parser<'a> {
                 };
                 self.expect_and_consume(&Kind::RightParen, "FunctionExpression")?;
                 let body = self.handle_statements()?;
-                Ok(Expr::new_literal(
-                    JSValue::new_function(ident, parameters, body),
-                    current_span,
-                ))
+                Ok(Expr::new_literal(JSValue::new_function(
+                    ident, parameters, body,
+                )))
             }
             token => Err(JSError::new(&format!("Unexpected token: {:?}", token))),
         }
@@ -481,7 +475,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn peek(&mut self) -> Option<&Token> {
+    fn _peek(&mut self) -> Option<&Token> {
         self.tokens.peek()
     }
 

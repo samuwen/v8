@@ -179,6 +179,13 @@ impl Token {
         }
     }
 
+    pub fn new_from_span(kind: Kind, span: &Span) -> Self {
+        Self {
+            kind,
+            span: span.clone(),
+        }
+    }
+
     pub fn new_eof() -> Self {
         Self {
             kind: Kind::Eof,

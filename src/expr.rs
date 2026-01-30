@@ -6,7 +6,6 @@ use crate::{
     Interpreter,
     errors::JSError,
     global::get_or_intern_string,
-    span::Span,
     token::{Kind, Token},
     values::{JSResult, JSValue},
 };
@@ -16,85 +15,70 @@ pub enum Expr {
     Assignment {
         identifier: Box<Expr>,
         right: Box<Expr>,
-        span: Span,
     },
     Binary {
         operator: Token,
         left: Box<Expr>,
         right: Box<Expr>,
-        span: Span,
     },
     Grouping {
         expr: Box<Expr>,
-        span: Span,
     },
     Literal {
         value: JSValue,
-        span: Span,
     },
     Unary {
         operator: Token,
         right: Box<Expr>,
-        span: Span,
     },
     Identifier {
         string_index: SymbolU32,
-        span: Span,
     },
 }
 
 impl Expr {
-    pub fn new_literal(value: JSValue, span: Span) -> Self {
-        Self::Literal { value, span }
+    pub fn new_literal(value: JSValue) -> Self {
+        Self::Literal { value }
     }
 
-    pub fn new_grouping(expr: Expr, span: Span) -> Self {
+    pub fn new_grouping(expr: Expr) -> Self {
         Self::Grouping {
             expr: Box::new(expr),
-            span,
         }
     }
 
-    pub fn new_identifier(value: &SymbolU32, span: Span) -> Self {
+    pub fn new_identifier(value: &SymbolU32) -> Self {
         Self::Identifier {
             string_index: *value,
-            span,
         }
     }
 
-    pub fn new_unary(operator: Token, right: Expr, span: Span) -> Self {
+    pub fn new_unary(operator: Token, right: Expr) -> Self {
         Self::Unary {
             operator,
             right: Box::new(right),
-            span,
         }
     }
 
-    pub fn new_binary(operator: Token, left: Expr, right: Expr, span: Span) -> Self {
+    pub fn new_binary(operator: Token, left: Expr, right: Expr) -> Self {
         Self::Binary {
             operator,
             left: Box::new(left),
             right: Box::new(right),
-            span,
         }
     }
 
-    pub fn new_assignment(identifier: Expr, right: Expr, span: Span) -> Self {
+    pub fn new_assignment(identifier: Expr, right: Expr) -> Self {
         Self::Assignment {
             identifier: Box::new(identifier),
             right: Box::new(right),
-            span,
         }
     }
 
     pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         match self {
-            Self::Literal { value, span: _ } => Ok(value.clone()),
-            Self::Unary {
-                operator,
-                right,
-                span: _,
-            } => {
+            Self::Literal { value } => Ok(value.clone()),
+            Self::Unary { operator, right } => {
                 let right = right.evaluate(interpreter)?;
                 match operator.get_kind() {
                     Kind::Bang => {
@@ -141,7 +125,6 @@ impl Expr {
                 operator,
                 left,
                 right,
-                span: _,
             } => {
                 let left = left.evaluate(interpreter)?;
                 let right = right.evaluate(interpreter)?;
@@ -157,12 +140,8 @@ impl Expr {
                     format!("Unhandled operator: {:?}", operator.get_kind())
                 );
             }
-            Expr::Assignment {
-                identifier,
-                right,
-                span: _,
-            } => {
-                let ident_index = if let Expr::Identifier { string_index, span } = &**identifier {
+            Expr::Assignment { identifier, right } => {
+                let ident_index = if let Expr::Identifier { string_index } = &**identifier {
                     string_index
                 } else {
                     panic!("Assignment got passed a non-identifier identifier"); // programming error
@@ -186,11 +165,8 @@ impl Expr {
                     }
                 }
             }
-            Expr::Grouping { expr, span: _ } => Ok(expr.evaluate(interpreter)?),
-            Expr::Identifier {
-                string_index,
-                span: _,
-            } => {
+            Expr::Grouping { expr } => Ok(expr.evaluate(interpreter)?),
+            Expr::Identifier { string_index } => {
                 let exists = interpreter.get_variable_from_current_environment(*string_index);
                 match exists {
                     Some(id) => {
@@ -209,11 +185,7 @@ impl Expr {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Assignment {
-                identifier,
-                right,
-                span: _,
-            } => {
+            Expr::Assignment { identifier, right } => {
                 write!(f, "Assignment({} = {})", identifier, right)
             }
 
@@ -221,31 +193,23 @@ impl fmt::Display for Expr {
                 operator,
                 left,
                 right,
-                span: _,
             } => {
                 write!(f, "Binary({}, {:?}, {})", left, operator, right)
             }
 
-            Expr::Grouping { expr, span: _ } => {
+            Expr::Grouping { expr } => {
                 write!(f, "Grouping({})", expr)
             }
 
-            Expr::Literal { value, span: _ } => {
+            Expr::Literal { value } => {
                 write!(f, "Literal({:?})", value)
             }
 
-            Expr::Unary {
-                operator,
-                right,
-                span: _,
-            } => {
+            Expr::Unary { operator, right } => {
                 write!(f, "Unary({:?} {})", operator, right)
             }
 
-            Expr::Identifier {
-                string_index,
-                span: _,
-            } => {
+            Expr::Identifier { string_index } => {
                 write!(f, "Identifier({:?})", string_index)
             }
         }

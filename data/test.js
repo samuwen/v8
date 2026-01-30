@@ -1,10 +1,7 @@
 let x = 0;
 
-while (true) {
-    if (x > 2) {
-        break;
-    }
-    x = x + 1;
+for (let i = 0; i < 20; i += 1) {
+    x += 2;
 }
 
 x;

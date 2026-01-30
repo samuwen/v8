@@ -5,9 +5,9 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub struct Span {
-    start: usize,
-    end: usize,
-    line: usize,
+    pub start: usize,
+    pub end: usize,
+    pub line: usize,
 }
 
 impl Span {
