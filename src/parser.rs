@@ -188,26 +188,34 @@ impl<'a> Parser<'a> {
 
     fn handle_expressions(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_equality()?;
-        if self
-            .current_token
-            .is_kinds(vec![Kind::Equals, Kind::PlusEquals])
-        {
+        if self.current_token.is_kinds(vec![
+            Kind::Equals,
+            Kind::PlusEquals,
+            Kind::MinusEquals,
+            Kind::StarEquals,
+            Kind::SlashEquals,
+        ]) {
             let op_token = self.current_token.clone();
             self.next_token();
             let right = self.handle_expressions()?;
-            match op_token.get_kind() {
-                Kind::PlusEquals => {
-                    let right = Expr::new_binary(
-                        Token::new_from_span(Kind::Plus, &op_token.get_span()),
-                        left.clone(),
-                        right,
-                    );
-                    left = Expr::new_assignment(left, right);
-                }
-                Kind::Plus => {
-                    left = Expr::new_assignment(left, right);
-                }
-                _ => unimplemented!(),
+            if op_token.is_kind(&Kind::Equals) {
+                // if normal do it normally
+                left = Expr::new_assignment(left, right);
+            } else {
+                // otherwise unpack it
+                let op = match op_token.get_kind() {
+                    Kind::PlusEquals => Kind::Plus,
+                    Kind::MinusEquals => Kind::Minus,
+                    Kind::StarEquals => Kind::Star,
+                    Kind::SlashEquals => Kind::Slash,
+                    _ => panic!("add the kind to the if list, dork"),
+                };
+                let right = Expr::new_binary(
+                    Token::new_from_span(op, &op_token.get_span()),
+                    left.clone(),
+                    right,
+                );
+                left = Expr::new_assignment(left, right);
             }
         }
         Ok(left)

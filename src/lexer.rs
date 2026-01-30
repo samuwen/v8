@@ -106,11 +106,22 @@ impl<'a> Lexer<'a> {
                         self.next_char();
                         self.add_token_and_advance(Kind::MinusMinus);
                     } else {
-                        self.add_token_and_advance(Kind::Minus);
+                        if self.check_peeked_char('=') {
+                            self.next_char();
+                            self.add_token_and_advance(Kind::MinusEquals);
+                        } else {
+                            self.add_token_and_advance(Kind::Minus);
+                        }
                     }
                 }
                 '*' => {
-                    self.add_token_and_advance(Kind::Star);
+                    let is_equals = self.check_peeked_char('=');
+                    if is_equals {
+                        self.next_char();
+                        self.add_token_and_advance(Kind::StarEquals);
+                    } else {
+                        self.add_token_and_advance(Kind::Star);
+                    }
                 }
                 '/' => {
                     let is_single_comment = self.check_peeked_char('/');
@@ -121,7 +132,13 @@ impl<'a> Lexer<'a> {
                         self.line += 1;
                         self.next_char();
                     } else {
-                        self.add_token_and_advance(Kind::Slash);
+                        let is_equals = self.check_peeked_char('=');
+                        if is_equals {
+                            self.next_char();
+                            self.add_token_and_advance(Kind::SlashEquals);
+                        } else {
+                            self.add_token_and_advance(Kind::Slash);
+                        }
                     }
                 }
                 '=' => {
