@@ -155,6 +155,7 @@ impl<'a> Parser<'a> {
                 self.next_token();
                 self.expect_and_consume(&Kind::LeftParen, "ForStatement")?;
                 let initializer = if self.current_token.is_kind(&Kind::Semicolon) {
+                    self.next_token(); // statements consume semis
                     None
                 } else {
                     Some(self.handle_statements()?)
@@ -167,8 +168,7 @@ impl<'a> Parser<'a> {
                 };
                 self.expect_and_consume(&Kind::Semicolon, "ForStatement")?;
 
-                let state = if self.current_token.is_kind(&Kind::Semicolon) {
-                    self.next_token();
+                let state = if self.current_token.is_kind(&Kind::RightParen) {
                     None
                 } else {
                     Some(self.handle_expressions()?)
@@ -220,10 +220,12 @@ impl<'a> Parser<'a> {
 
     fn handle_comparisons(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_terms()?;
-        while self
-            .current_token
-            .is_kinds(vec![Kind::LessThan, Kind::GreaterThan])
-        {
+        while self.current_token.is_kinds(vec![
+            Kind::LessThan,
+            Kind::GreaterThan,
+            Kind::LessThanOrEquals,
+            Kind::GreaterThanOrEquals,
+        ]) {
             let operator = self.current_token.clone();
             let operator_span = operator.get_span();
             self.next_token();

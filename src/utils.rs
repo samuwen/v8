@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use log::debug;
+use log::trace;
 use regex::Regex;
 
 use crate::{errors::JSError, values::JSResult};
@@ -12,7 +12,7 @@ fn get_ident_regex() -> &'static Regex {
 }
 
 pub fn check_identifier(source: &str) -> JSResult<()> {
-    debug!("checking identifier: {source}");
+    trace!("checking identifier: {source}");
     let regex = get_ident_regex();
     if regex.is_match(source) {
         return Ok(());

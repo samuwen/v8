@@ -4,6 +4,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
+use log::debug;
 use string_interner::{Symbol, symbol::SymbolU32};
 
 use crate::{
@@ -265,6 +266,7 @@ impl JSValue {
         // must be numbers at this point
         let l_num = left_prim.to_numeric(interpreter)?;
         let r_num = right_prim.to_numeric(interpreter)?;
+        debug!("Checking: {} {:?} {}", l_num, op.get_kind(), r_num);
         // assert these are the same type when doing bigints
         let result = match op.get_kind() {
             Kind::Plus => add(l_num, r_num),
@@ -283,11 +285,11 @@ impl JSValue {
                 return Ok(JSValue::new_boolean(&value));
             }
             Kind::GreaterThan => {
-                let res = !less_than(l_num, r_num);
+                let res = less_than(r_num, l_num);
                 return Ok(JSValue::new_boolean(&res));
             }
             Kind::GreaterThanOrEquals => {
-                let gt = !less_than(l_num, r_num);
+                let gt = less_than(r_num, l_num);
                 let eq = equal(l_num, r_num);
                 let value = gt || eq;
                 return Ok(JSValue::new_boolean(&value));

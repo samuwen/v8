@@ -4,7 +4,7 @@ use env_logger::init;
 
 use crate::{
     Interpreter,
-    errors::JSError,
+    errors::{ErrorKind, JSError},
     expr::Expr,
     values::{JSResult, JSValue},
     variable::Variable,
@@ -110,8 +110,8 @@ impl Stmt {
                 }
                 Ok(JSValue::Undefined)
             }
-            Stmt::Break => todo!(),
-            Stmt::Continue => todo!(),
+            Stmt::Break => Err(JSError::new_break()),
+            Stmt::Continue => Err(JSError::new_continue()),
             Self::Expression(expr) => expr.evaluate(interpreter),
             Stmt::For {
                 initializer,
@@ -119,8 +119,10 @@ impl Stmt {
                 state,
                 body,
             } => {
+                let mut entered_scope = false;
                 if let Some(stmt) = initializer {
                     interpreter.enter_scope();
+                    entered_scope = true;
                     stmt.evaluate(interpreter)?;
                 }
                 'forst: loop {
@@ -133,9 +135,19 @@ impl Stmt {
                     if let Some(expr) = state {
                         expr.evaluate(interpreter)?;
                     }
-                    body.evaluate(interpreter)?;
+                    let body_res = body.evaluate(interpreter);
+                    if let Err(e) = body_res {
+                        if e.kind == ErrorKind::Break {
+                            break;
+                        } else if e.kind == ErrorKind::Continue {
+                            continue;
+                        }
+                    }
                 }
 
+                if entered_scope {
+                    interpreter.leave_scope();
+                }
                 Ok(JSValue::Undefined)
             }
             Stmt::FunctionDecl {
@@ -189,7 +201,14 @@ impl Stmt {
                     if !condition.to_boolean() {
                         break 'whilst;
                     }
-                    body.evaluate(interpreter)?;
+                    let body_res = body.evaluate(interpreter);
+                    if let Err(e) = body_res {
+                        if e.kind == ErrorKind::Break {
+                            break;
+                        } else if e.kind == ErrorKind::Continue {
+                            continue;
+                        }
+                    }
                 }
                 Ok(JSValue::Undefined)
             }
