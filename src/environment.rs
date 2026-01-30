@@ -10,13 +10,15 @@ type StringId = SymbolU32;
 
 #[derive(Debug, Clone)]
 pub struct Environment {
-    parent_id: Option<EnvironmentId>,
+    is_expired: bool,
     handles: HashMap<StringId, usize>, // stringID: variableID (maps string names to variable ids)
+    parent_id: Option<EnvironmentId>,
 }
 
 impl Environment {
     pub fn new(parent_id: Option<EnvironmentId>) -> Self {
         Self {
+            is_expired: false,
             parent_id,
             handles: HashMap::new(),
         }
@@ -48,5 +50,13 @@ impl Environment {
     pub fn add_variable(&mut self, string_id: StringId, variable_id: usize) {
         self.handles.insert(string_id, variable_id);
         trace!("{:?}", self);
+    }
+
+    pub fn get_parent_handle(&self) -> Option<usize> {
+        self.parent_id
+    }
+
+    pub fn expire(&mut self) {
+        self.is_expired = true;
     }
 }

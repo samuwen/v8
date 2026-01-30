@@ -1,5 +1,7 @@
 use std::fmt;
 
+use env_logger::init;
+
 use crate::{
     Interpreter,
     errors::JSError,
@@ -116,7 +118,26 @@ impl Stmt {
                 condition,
                 state,
                 body,
-            } => todo!(),
+            } => {
+                if let Some(stmt) = initializer {
+                    interpreter.enter_scope();
+                    stmt.evaluate(interpreter)?;
+                }
+                'forst: loop {
+                    if let Some(expr) = condition {
+                        let value = expr.evaluate(interpreter)?;
+                        if !value.to_boolean() {
+                            break 'forst;
+                        }
+                    }
+                    if let Some(expr) = state {
+                        expr.evaluate(interpreter)?;
+                    }
+                    body.evaluate(interpreter)?;
+                }
+
+                Ok(JSValue::Undefined)
+            }
             Stmt::FunctionDecl {
                 identifier,
                 arguments,
@@ -155,9 +176,7 @@ impl Stmt {
                     None => JSValue::Undefined,
                 };
                 // add a new variable to the variable heap
-                let var = Variable::new(*is_mutable, rhs);
-                let var_id = interpreter.add_variable_to_heap(var);
-                interpreter.add_variable_to_current_environment(str_id, var_id);
+                interpreter.new_variable(str_id, *is_mutable, rhs);
 
                 Ok(JSValue::Undefined)
             }
@@ -165,22 +184,12 @@ impl Stmt {
                 condition: raw_condition,
                 body,
             } => {
-                let mut condition = raw_condition.evaluate(interpreter)?;
-                let mut debug_counter = 0;
-                if !condition.to_boolean() {
-                    return Ok(JSValue::Undefined);
-                }
                 'whilst: loop {
+                    let condition = raw_condition.evaluate(interpreter)?;
                     if !condition.to_boolean() {
                         break 'whilst;
                     }
-                    if debug_counter > 100 {
-                        break 'whilst;
-                    }
                     body.evaluate(interpreter)?;
-                    condition = raw_condition.evaluate(interpreter)?;
-
-                    debug_counter += 1;
                 }
                 Ok(JSValue::Undefined)
             }

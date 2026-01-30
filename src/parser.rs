@@ -159,7 +159,6 @@ impl<'a> Parser<'a> {
                 } else {
                     Some(self.handle_statements()?)
                 };
-                self.expect_and_consume(&Kind::Semicolon, "ForStatement")?;
 
                 let condition = if self.current_token.is_kind(&Kind::Semicolon) {
                     None

@@ -1,3 +1,4 @@
+use env_logger::Env;
 use log::debug;
 use string_interner::symbol::SymbolU32;
 
@@ -107,8 +108,14 @@ impl Interpreter {
         self.variable_heap.get_mut(var_id)
     }
 
+    fn new_variable(&mut self, ident_id: SymbolU32, is_mutable: bool, value: JSValue) {
+        let var = Variable::new(is_mutable, value);
+        let var_id = self.add_variable_to_heap(var);
+        self.add_variable_to_current_environment(ident_id, var_id);
+    }
+
     fn add_variable_to_current_environment(&mut self, str_id: SymbolU32, var_id: usize) {
-        let mut current_environment = self.get_current_environment_mut();
+        let current_environment = self.get_current_environment_mut();
         current_environment.add_variable(str_id, var_id);
     }
 
@@ -125,5 +132,22 @@ impl Interpreter {
     fn get_current_environment_mut(&mut self) -> &mut Environment {
         self.environment_heap
             .get_mut(self.current_environment_handle)
+    }
+
+    fn enter_scope(&mut self) {
+        let new_env = Environment::new(Some(self.current_environment_handle));
+        let id = self.environment_heap.add_new_item(new_env);
+        self.current_environment_handle = id;
+    }
+
+    fn leave_scope(&mut self) {
+        let current_env = self.get_current_environment_mut();
+        current_env.expire();
+        let parent = current_env.get_parent_handle();
+        if parent.is_none() {
+            panic!("Leave scope called on root for some reason");
+        }
+        let parent_id = parent.unwrap();
+        self.current_environment_handle = parent_id;
     }
 }
