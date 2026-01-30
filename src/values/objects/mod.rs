@@ -7,7 +7,6 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
-    errors::JSError,
     stmt::Stmt,
     values::{JSResult, JSValue, PreferredType},
 };

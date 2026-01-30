@@ -3,13 +3,11 @@ use std::collections::HashMap;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
-    Interpreter,
     environment::Environment,
-    global::get_or_intern_string,
     stmt::Stmt,
     values::{
         JSResult, JSValue, PreferredType,
-        objects::{CALL, ObjectProperty},
+        objects::ObjectProperty,
     },
 };
 

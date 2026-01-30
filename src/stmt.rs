@@ -1,13 +1,11 @@
 use std::fmt;
 
-use env_logger::init;
 
 use crate::{
     Interpreter,
     errors::{ErrorKind, JSError},
     expr::Expr,
     values::{JSResult, JSValue},
-    variable::Variable,
 };
 
 #[derive(Clone, Debug)]

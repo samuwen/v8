@@ -1,17 +1,16 @@
 use std::{
-    fmt::{self, Display},
     mem::discriminant,
     sync::{Mutex, OnceLock},
 };
 
 use log::debug;
-use string_interner::{Symbol, symbol::SymbolU32};
+use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
     errors::JSError,
     expr::Expr,
-    global::{get_or_intern_string, get_string_from_pool, get_string_from_pool_unchecked},
+    global::{get_or_intern_string, get_string_from_pool},
     stmt::Stmt,
     token::{Kind, Token},
     values::{

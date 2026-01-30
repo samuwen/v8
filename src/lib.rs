@@ -1,4 +1,3 @@
-use env_logger::Env;
 use log::debug;
 use string_interner::symbol::SymbolU32;
 

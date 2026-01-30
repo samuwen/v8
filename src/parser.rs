@@ -1,12 +1,11 @@
-use std::{iter::Peekable, sync::OnceLock, vec::IntoIter};
+use std::{iter::Peekable, vec::IntoIter};
 
-use regex::Regex;
 
 use crate::{
     Interpreter,
     errors::JSError,
     expr::Expr,
-    global::{get_or_intern_string, get_string_from_pool},
+    global::get_or_intern_string,
     stmt::Stmt,
     token::{Kind, Token},
     utils::check_identifier,

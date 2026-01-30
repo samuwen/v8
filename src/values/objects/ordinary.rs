@@ -9,7 +9,7 @@ use crate::{
     values::{
         JSResult, JSValue, PreferredType,
         objects::{
-            ObjectId, ObjectProperty, Properties, TO_PRIMITIVE_SYM, function::FunctionObject,
+            ObjectId, ObjectProperty, Properties, TO_PRIMITIVE_SYM,
         },
     },
 };

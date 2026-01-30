@@ -1,6 +1,5 @@
 use std::fmt;
 
-use log::debug;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
