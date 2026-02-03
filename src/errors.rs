@@ -52,4 +52,11 @@ impl JSError {
             message: String::new(),
         }
     }
+
+    pub fn new_not_found(kind: &str, id: usize) -> Self {
+        Self {
+            kind: ErrorKind::Normal,
+            message: format!("{kind} with id {id} not found"),
+        }
+    }
 }

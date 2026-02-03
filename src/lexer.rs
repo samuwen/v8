@@ -87,6 +87,9 @@ impl<'a> Lexer<'a> {
                 ' ' | '\t' => {
                     self.next_char();
                 }
+                '.' => {
+                    self.add_token_and_advance(Kind::Dot);
+                }
                 '+' => {
                     if self.check_peeked_char('+') {
                         self.next_char();

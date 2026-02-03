@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::fmt;
 
 use string_interner::symbol::SymbolU32;
@@ -33,6 +36,17 @@ pub enum Expr {
     },
     Identifier {
         string_index: SymbolU32,
+    },
+    ObjectCall {
+        expr: Box<Expr>,
+    },
+    FunctionCall {
+        identifier: Box<Expr>,
+        arguments: Vec<Expr>,
+    },
+    Postfix {
+        left: Box<Expr>,
+        operator: Token,
     },
 }
 
@@ -75,6 +89,26 @@ impl Expr {
         }
     }
 
+    pub fn new_object_call(identifier: Expr) -> Self {
+        Self::ObjectCall {
+            expr: Box::new(identifier),
+        }
+    }
+
+    pub fn new_function_call(identifier: Expr, arguments: Vec<Expr>) -> Self {
+        Self::FunctionCall {
+            identifier: Box::new(identifier),
+            arguments,
+        }
+    }
+
+    pub fn new_postfix(left: Expr, operator: Token) -> Self {
+        Self::Postfix {
+            left: Box::new(left),
+            operator,
+        }
+    }
+
     pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         match self {
             Self::Literal { value } => Ok(value.clone()),
@@ -108,7 +142,12 @@ impl Expr {
                             JSValue::Number { data: _ } => "number",
                             JSValue::BigInt => "bigint",
                             JSValue::Object { object_id } => {
-                                let obj = interpreter.object_heap.get_mut(object_id);
+                                let obj = interpreter.object_heap.get_mut(object_id).ok_or(
+                                    JSError::new(&format!(
+                                        "Object with id {} not found",
+                                        &object_id
+                                    )),
+                                )?;
                                 match obj.is_function() {
                                     true => "function",
                                     false => "object",
@@ -120,6 +159,9 @@ impl Expr {
                     }
                     _ => panic!("Invalid unary operation: {:?}", operator.get_kind()),
                 }
+            }
+            Self::Postfix { left, operator } => {
+                todo!()
             }
             Self::Binary {
                 operator,
@@ -150,7 +192,7 @@ impl Expr {
                 let exists = interpreter.get_variable_from_current_environment(*ident_index);
                 match exists {
                     Some(id) => {
-                        let var = interpreter.get_variable_from_heap(id);
+                        let var = interpreter.get_variable_from_heap(id)?;
                         if var.is_mutable() {
                             var.update_value(rhs.clone())?;
                             return Ok(rhs);
@@ -171,13 +213,35 @@ impl Expr {
                 match exists {
                     Some(id) => {
                         // already exists, so we evaluate the value
-                        let var = interpreter.variable_heap.get_item_from_id(id);
+                        let var = interpreter
+                            .variable_heap
+                            .get_item_from_id(id)
+                            .ok_or(JSError::new_not_found("Identifier", id))?;
                         Ok(var.get_value())
                     }
                     // doesn't exist yet, this is a declaration / initialization. pass the interned index to the statement
                     None => Ok(JSValue::new_string(string_index)),
                 }
             }
+            Expr::FunctionCall {
+                identifier,
+                arguments,
+            } => {
+                let args = arguments
+                    .into_iter()
+                    .map(|arg| {
+                        let res = arg.evaluate(interpreter)?;
+                        Ok(res)
+                    })
+                    .collect::<JSResult<Vec<JSValue>>>()?;
+                // the evaluation gets the object back out of the heap
+                let value = identifier.evaluate(interpreter)?;
+                let obj_id = value.get_object_id()?;
+                let object = value.get_object(interpreter)?.clone();
+                let result = object.call(args, interpreter)?;
+                Ok(result)
+            }
+            Expr::ObjectCall { expr } => todo!(),
         }
     }
 }
@@ -188,7 +252,6 @@ impl fmt::Display for Expr {
             Expr::Assignment { identifier, right } => {
                 write!(f, "Assignment({} = {})", identifier, right)
             }
-
             Expr::Binary {
                 operator,
                 left,
@@ -196,21 +259,35 @@ impl fmt::Display for Expr {
             } => {
                 write!(f, "Binary({}, {:?}, {})", left, operator, right)
             }
-
             Expr::Grouping { expr } => {
                 write!(f, "Grouping({})", expr)
             }
-
             Expr::Literal { value } => {
                 write!(f, "Literal({:?})", value)
             }
-
             Expr::Unary { operator, right } => {
                 write!(f, "Unary({:?} {})", operator, right)
             }
-
+            Expr::Postfix { operator, left } => {
+                write!(f, "Postfix({} {:?})", left, operator)
+            }
             Expr::Identifier { string_index } => {
                 write!(f, "Identifier({:?})", string_index)
+            }
+            Expr::ObjectCall { expr } => {
+                write!(f, "ObjectCall({})", expr)
+            }
+            Expr::FunctionCall {
+                identifier,
+                arguments,
+            } => {
+                let ident = format!("{identifier}");
+                let args = arguments
+                    .iter()
+                    .map(|arg| format!("{arg}"))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "FunctionCall {ident}({args})")
             }
         }
     }

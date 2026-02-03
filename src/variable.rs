@@ -1,10 +1,14 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use crate::{
     errors::JSError,
     values::{JSResult, JSValue},
 };
 
-pub type VariableId = usize;
+pub type _VariableId = usize;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Variable {
     is_initialized: bool,

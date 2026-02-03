@@ -1,10 +1,14 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::fmt;
 
 use crate::{
     Interpreter,
     errors::{ErrorKind, JSError},
     expr::Expr,
-    values::{JSResult, JSValue},
+    utils::get_function_params,
+    values::{JSObject, JSResult, JSValue},
 };
 
 #[derive(Clone, Debug)]
@@ -103,7 +107,8 @@ impl Stmt {
         match self {
             Stmt::Block(stmts) => {
                 for stmt in stmts {
-                    stmt.evaluate(interpreter)?;
+                    let res = stmt.evaluate(interpreter)?;
+                    println!("statement result: {res:?}");
                 }
                 Ok(JSValue::Undefined)
             }
@@ -118,7 +123,7 @@ impl Stmt {
             } => {
                 let mut entered_scope = false;
                 if let Some(stmt) = initializer {
-                    interpreter.enter_scope();
+                    interpreter.enter_scope(None);
                     entered_scope = true;
                     stmt.evaluate(interpreter)?;
                 }
@@ -151,7 +156,23 @@ impl Stmt {
                 identifier,
                 arguments,
                 body,
-            } => todo!(),
+            } => {
+                let ident = identifier.evaluate(interpreter)?;
+                let ident_id = ident.to_string(interpreter)?;
+                let scope_id = interpreter.enter_scope(None);
+                let parameters = get_function_params(arguments, interpreter)?;
+                for param in &parameters {
+                    interpreter.new_variable(*param, true, JSValue::Undefined);
+                }
+                interpreter.leave_scope();
+                let object_id =
+                    JSObject::new_function_object(body.clone(), parameters, scope_id, interpreter);
+
+                let value = JSValue::Object { object_id };
+                interpreter.new_variable(ident_id, false, value);
+
+                Ok(JSValue::Undefined)
+            }
             Stmt::If {
                 condition,
                 branch_true,

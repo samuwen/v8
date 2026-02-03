@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 mod function;
 mod ordinary;
 
@@ -7,6 +10,7 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
+    expr::Expr,
     stmt::Stmt,
     values::{JSResult, JSValue, PreferredType},
 };
@@ -25,11 +29,17 @@ pub enum JSObject {
 impl JSObject {
     pub fn new_ordinary_object(properties: Properties, interpreter: &mut Interpreter) -> usize {
         let object = JSObject::Ordinary(OrdinaryObject::new(properties, interpreter));
-        interpreter.object_heap.add_new_item(object)
+        interpreter.add_object_to_heap(object)
     }
 
-    pub fn new_function_object(interpreter: &mut Interpreter, call: Box<Stmt>) -> usize {
-        todo!()
+    pub fn new_function_object(
+        call: Box<Stmt>,
+        params: Vec<SymbolU32>,
+        environment_id: usize,
+        interpreter: &mut Interpreter,
+    ) -> usize {
+        let object = JSObject::Function(FunctionObject::new(call, environment_id, params));
+        interpreter.add_object_to_heap(object)
     }
 
     pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
@@ -41,14 +51,14 @@ impl JSObject {
 
     pub fn is_function(&self) -> bool {
         match self {
-            JSObject::Ordinary(ordinary_object) => false,
-            JSObject::Function(function_object) => true,
+            JSObject::Ordinary(_) => false,
+            JSObject::Function(_) => true,
         }
     }
 
     pub fn value_of(&self) -> JSResult<JSValue> {
         match self {
-            JSObject::Ordinary(ordinary) => self.value_of(),
+            JSObject::Ordinary(ordinary) => ordinary.value_of(),
             JSObject::Function(function) => todo!(),
         }
     }
@@ -57,6 +67,13 @@ impl JSObject {
         match self {
             JSObject::Ordinary(ordinary) => ordinary.to_string(),
             JSObject::Function(function) => todo!(),
+        }
+    }
+
+    pub fn call(&self, args: Vec<JSValue>, interpreter: &mut Interpreter) -> JSResult<JSValue> {
+        match self {
+            JSObject::Ordinary(ordinary_object) => todo!(),
+            JSObject::Function(object) => object.call(args, interpreter),
         }
     }
 }

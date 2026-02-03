@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::collections::HashMap;
 
 pub struct Heap<V> {
@@ -23,19 +26,17 @@ impl<V> Heap<V> {
         id
     }
 
-    pub fn get_mut(&mut self, id: usize) -> &mut V {
-        // should be a safe unwrap - we only call this when we need to actually use a real item
-        self.map.get_mut(&id).unwrap()
+    pub fn get_mut(&mut self, id: usize) -> Option<&mut V> {
+        self.map.get_mut(&id)
     }
 
-    pub fn get_item_from_id(&self, id: usize) -> &V {
-        // should be a safe unwrap - we only call this when we need to actually use a real item
-        self.map.get(&id).unwrap()
+    pub fn get_item_from_id(&self, id: usize) -> Option<&V> {
+        self.map.get(&id)
     }
 
     pub fn get_item_from_option(&mut self, opt: &Option<usize>) -> Option<&mut V> {
         if let Some(proto_id) = opt {
-            return Some(self.get_mut(*proto_id));
+            return self.get_mut(*proto_id);
         }
         None
     }

@@ -17,7 +17,9 @@ pub fn get_string_from_pool(sym: &SymbolU32) -> Option<String> {
     interner.resolve(*sym).map(|s| s.to_owned())
 }
 
-/// same as get_string_from_pool but unwraps the input
-pub fn get_string_from_pool_unchecked(sym: &SymbolU32) -> String {
-    get_string_from_pool(sym).unwrap()
+#[allow(dead_code)]
+#[cfg(debug_assertions)]
+pub fn dump_pool() {
+    let interner = get_interner().lock().unwrap();
+    interner.iter().for_each(|item| println!("{:?}", item));
 }

@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::collections::HashMap;
 
 use log::trace;
@@ -30,6 +33,10 @@ impl Environment {
         }
         if let Some(parent) = self.parent_id {
             let parent_env = interpreter.environment_heap.get_item_from_id(parent);
+            if parent_env.is_none() {
+                return false;
+            }
+            let parent_env = parent_env.unwrap();
             return parent_env.has_variable(string_id, interpreter);
         }
         false
@@ -41,7 +48,7 @@ impl Environment {
             return Some(*handle);
         }
         if let Some(parent) = self.parent_id {
-            let parent_env = interpreter.environment_heap.get_item_from_id(parent);
+            let parent_env = interpreter.environment_heap.get_item_from_id(parent)?;
             return parent_env.get_variable(string_id, interpreter);
         }
         None

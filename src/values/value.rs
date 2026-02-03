@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::{
     mem::discriminant,
     sync::{Mutex, OnceLock},
@@ -13,6 +16,7 @@ use crate::{
     global::{get_or_intern_string, get_string_from_pool},
     stmt::Stmt,
     token::{Kind, Token},
+    utils::get_function_params,
     values::{
         JSResult, PreferredType, add, divide, equal, less_than, multiply,
         objects::{JSObject, ObjectId, Properties},
@@ -107,7 +111,10 @@ impl JSValue {
             }
             JSValue::Number { data } => *data,
             JSValue::Object { object_id } => {
-                let object = interpreter.object_heap.get_mut(*object_id);
+                let object = interpreter
+                    .object_heap
+                    .get_mut(*object_id)
+                    .ok_or(JSError::new_not_found("Object", *object_id))?;
                 let prim_value = object.to_primitive(PreferredType::Number)?;
                 prim_value.to_number(interpreter)?
             }
@@ -134,7 +141,10 @@ impl JSValue {
             JSValue::Number { data } => get_or_intern_string(&data.to_string()),
             JSValue::BigInt => todo!(),
             JSValue::Object { object_id } => {
-                let object = interpreter.object_heap.get_mut(*object_id);
+                let object = interpreter
+                    .object_heap
+                    .get_mut(*object_id)
+                    .ok_or(JSError::new_not_found("Object", *object_id))?;
                 let prim_value = object.to_primitive(PreferredType::String)?;
                 prim_value.to_string(interpreter)?
             }
@@ -191,6 +201,23 @@ impl JSValue {
         Self::Object { object_id: id }
     }
 
+    pub fn get_object_id(&self) -> JSResult<usize> {
+        if let JSValue::Object { object_id } = self {
+            return Ok(*object_id);
+        }
+        Err(JSError::new("Object not found"))
+    }
+
+    pub fn get_object<'a>(&'a self, interpreter: &'a Interpreter) -> JSResult<&'a JSObject> {
+        if let JSValue::Object { object_id } = self {
+            let value = interpreter
+                .get_object_from_heap(*object_id)
+                .ok_or(JSError::new_not_found("Object", *object_id))?;
+            return Ok(value);
+        }
+        Err(JSError::new("Expected object"))
+    }
+
     pub fn new_string(s: &SymbolU32) -> Self {
         Self::String { data: *s }
     }
@@ -215,8 +242,33 @@ impl JSValue {
         todo!()
     }
 
-    pub fn new_function(ident: Option<Expr>, args: Vec<Expr>, body: Stmt) -> Self {
-        todo!()
+    pub fn new_function(
+        ident: Option<Expr>,
+        args: Vec<Expr>,
+        body: Stmt,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<Self> {
+        let identifier = match ident {
+            Some(i) => i.evaluate(interpreter)?,
+            None => {
+                let sym_id = get_new_symbol_id();
+                let description = format!("unknown-function-{sym_id}");
+                let desc = get_or_intern_string(&description);
+                JSValue::Symbol {
+                    id: get_new_symbol_id(),
+                    description: desc,
+                }
+            }
+        };
+        let ident_id = identifier.to_string(interpreter)?;
+        let scope_id = interpreter.enter_scope(None);
+        let parameters = get_function_params(&args, interpreter)?;
+        let object_id =
+            JSObject::new_function_object(Box::new(body), parameters, scope_id, interpreter);
+        let value = JSValue::Object { object_id };
+        interpreter.new_variable(ident_id, false, value);
+
+        Ok(JSValue::Undefined)
     }
 
     pub fn to_int_32(&self, interpreter: &mut Interpreter) -> JSResult<i32> {

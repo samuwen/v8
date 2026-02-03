@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::collections::HashMap;
 
 use string_interner::symbol::SymbolU32;
@@ -8,9 +11,7 @@ use crate::{
     global::get_or_intern_string,
     values::{
         JSResult, JSValue, PreferredType,
-        objects::{
-            ObjectId, ObjectProperty, Properties, TO_PRIMITIVE_SYM,
-        },
+        objects::{ObjectId, ObjectProperty, Properties, TO_PRIMITIVE_SYM},
     },
 };
 

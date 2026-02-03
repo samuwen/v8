@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::fs::File;
 use std::io::Read;
 
@@ -42,7 +45,7 @@ fn main() -> Result<()> {
             std::process::exit(1);
         }
         // we have a valid js file that's been read into a string
-        interpreter.interpret(&source);
+        let _res = interpreter.interpret(&source);
         std::process::exit(0);
     }
     println!("Welcome to v8 0.0.1");

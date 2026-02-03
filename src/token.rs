@@ -94,6 +94,7 @@ pub enum Kind {
     GreaterThan,
     GreaterThanOrEquals,
     Percent,
+    Dot,
     Eof,
 }
 
@@ -223,6 +224,26 @@ impl Token {
             | Kind::GreaterThan
             | Kind::GreaterThanOrEquals
             | Kind::Percent => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_unary_operator(&self) -> bool {
+        match self.get_kind() {
+            Kind::Minus
+            | Kind::MinusMinus
+            | Kind::Bang
+            | Kind::Typeof
+            | Kind::Plus
+            | Kind::PlusPlus
+            | Kind::Void => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_postfix(&self) -> bool {
+        match self.get_kind() {
+            Kind::PlusPlus | Kind::MinusMinus => true,
             _ => false,
         }
     }

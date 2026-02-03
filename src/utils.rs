@@ -2,8 +2,9 @@ use std::sync::OnceLock;
 
 use log::trace;
 use regex::Regex;
+use string_interner::symbol::SymbolU32;
 
-use crate::{errors::JSError, values::JSResult};
+use crate::{Interpreter, errors::JSError, expr::Expr, values::JSResult};
 
 static IDENTIFIER_REGEX: OnceLock<Regex> = OnceLock::new();
 
@@ -18,4 +19,18 @@ pub fn check_identifier(source: &str) -> JSResult<()> {
         return Ok(());
     }
     Err(JSError::new("Identifier expected"))
+}
+
+pub fn get_function_params(
+    args: &Vec<Expr>,
+    interpreter: &mut Interpreter,
+) -> JSResult<Vec<SymbolU32>> {
+    let parameters = args
+        .iter()
+        .map(|arg| {
+            let evaluated = arg.evaluate(interpreter)?;
+            evaluated.to_string(interpreter)
+        })
+        .collect::<JSResult<Vec<SymbolU32>>>()?;
+    Ok(parameters)
 }

@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
@@ -56,7 +59,7 @@ impl<'a> Parser<'a> {
                 let is_mutable = self.current_token.is_kinds(vec![Kind::Let, Kind::Var]);
                 self.next_token();
 
-                let ident = self.handle_primaries()?; // get ident
+                let ident = self.get_identifier()?;
                 let expr = if self.current_token.is_kind(&Kind::Equals) {
                     self.next_token(); // consume equals
                     Some(self.handle_expressions()?)
@@ -69,18 +72,18 @@ impl<'a> Parser<'a> {
 
             Kind::Function => {
                 self.next_token();
-                let ident = self.handle_expressions()?;
+                let ident = self.get_identifier()?;
                 self.expect_and_consume(&Kind::LeftParen, "FunctionDecl")?;
 
                 let parameters = if self.current_token.is_kind(&Kind::RightParen) {
                     vec![]
                 } else {
                     let mut params = vec![];
-                    let first_param = self.handle_expressions()?;
+                    let first_param = self.get_identifier()?;
                     params.push(first_param);
                     while self.current_token.is_kind(&Kind::Comma) {
                         self.next_token();
-                        let param = self.handle_expressions()?;
+                        let param = self.get_identifier()?;
                         params.push(param);
                     }
                     params
@@ -186,8 +189,13 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // just to be consistent with the grammar
     fn handle_expressions(&mut self) -> JSResult<Expr> {
-        let mut left = self.handle_equality()?;
+        self.handle_assignment()
+    }
+
+    fn handle_assignment(&mut self) -> JSResult<Expr> {
+        let mut left = self.handle_call()?; // this either gets a call chain or an identifier
         if self.current_token.is_kinds(vec![
             Kind::Equals,
             Kind::PlusEquals,
@@ -197,7 +205,12 @@ impl<'a> Parser<'a> {
         ]) {
             let op_token = self.current_token.clone();
             self.next_token();
-            let right = self.handle_expressions()?;
+            let peek = self._peek().ok_or(JSError::new("Unexpected EOF"))?;
+            let right = if peek.is_kind(&Kind::Equals) {
+                self.handle_assignment()?
+            } else {
+                self.handle_equality()?
+            };
             if op_token.is_kind(&Kind::Equals) {
                 // if normal do it normally
                 left = Expr::new_assignment(left, right);
@@ -277,30 +290,76 @@ impl<'a> Parser<'a> {
     }
 
     fn handle_unaries(&mut self) -> JSResult<Expr> {
-        if self.current_token.is_kinds(vec![
-            Kind::Minus,
-            Kind::Bang,
-            Kind::Typeof,
-            Kind::Plus,
-            Kind::Void,
-        ]) {
+        if self.current_token.is_unary_operator() {
             let operator = self.current_token.clone();
             self.next_token();
             let right = self.handle_unaries()?;
             return Ok(Expr::new_unary(operator, right));
         }
-        let expr = self.handle_primaries()?;
-        Ok(expr)
+        Ok(self.handle_postfix()?)
+    }
+
+    fn handle_postfix(&mut self) -> JSResult<Expr> {
+        let mut left = self.handle_call()?;
+        if self.current_token.is_postfix() {
+            let operator = self.current_token.clone();
+            self.next_token();
+            left = Expr::new_postfix(left, operator);
+        }
+
+        Ok(left)
+    }
+
+    fn handle_call(&mut self) -> JSResult<Expr> {
+        let mut left = self.handle_primaries()?;
+        while self
+            .current_token
+            .is_kinds(vec![Kind::Dot, Kind::LeftParen, Kind::LeftSquare])
+        {
+            let prev = self.current_token.clone();
+            self.next_token();
+            match prev.get_kind() {
+                Kind::Dot => {
+                    let ident = self.get_identifier()?;
+                    left = Expr::new_object_call(ident);
+                }
+                Kind::LeftParen => {
+                    println!("{left}");
+                    let args = if self.current_token.is_kind(&Kind::RightParen) {
+                        vec![]
+                    } else {
+                        let mut args = Vec::with_capacity(6);
+                        let arg = self.handle_expressions()?;
+                        args.push(arg);
+                        while self.current_token.is_kind(&Kind::Comma) {
+                            self.next_token();
+                            let param = self.handle_expressions()?;
+                            args.push(param);
+                        }
+                        args
+                    };
+                    self.expect_and_consume(&Kind::RightParen, "CallExpr")?;
+                    left = Expr::new_function_call(left, args);
+                }
+                Kind::LeftSquare => {
+                    let expr = self.handle_expressions()?;
+                    self.expect_and_consume(&Kind::RightSquare, "CallExpr")?;
+                    left = Expr::new_object_call(expr);
+                }
+                _ => (),
+            }
+        }
+        Ok(left)
     }
 
     fn handle_primaries(&mut self) -> JSResult<Expr> {
         let current = self.current_token.clone();
-        let current_span = current.get_span();
-        self.next_token();
+        let current_span = self.current_token.get_span();
         let source_value = self
             .interpreter
             .get_source_at_span(&current_span)
             .to_string();
+        self.next_token();
         match current.get_kind() {
             Kind::Number => {
                 let num = source_value
@@ -444,8 +503,8 @@ impl<'a> Parser<'a> {
                 )));
             }
             Kind::Function => {
-                // weird literal function expression syntax
                 self.next_token();
+                // weird literal function expression syntax
                 let ident = if self.current_token.is_kind(&Kind::LeftParen) {
                     None
                 } else {
@@ -457,7 +516,7 @@ impl<'a> Parser<'a> {
                 let parameters = if self.current_token.is_kind(&Kind::RightParen) {
                     vec![]
                 } else {
-                    let mut params = vec![];
+                    let mut params = Vec::with_capacity(6); // that'd be a lotta args
                     let first_param = self.handle_expressions()?;
                     params.push(first_param);
                     while self.current_token.is_kind(&Kind::Comma) {
@@ -469,9 +528,8 @@ impl<'a> Parser<'a> {
                 };
                 self.expect_and_consume(&Kind::RightParen, "FunctionExpression")?;
                 let body = self.handle_statements()?;
-                Ok(Expr::new_literal(JSValue::new_function(
-                    ident, parameters, body,
-                )))
+                let created = JSValue::new_function(ident, parameters, body, self.interpreter)?;
+                Ok(Expr::new_literal(created))
             }
             token => Err(JSError::new(&format!("Unexpected token: {:?}", token))),
         }
@@ -494,5 +552,17 @@ impl<'a> Parser<'a> {
         }
         let error = JSError::new(&format!("Expected '{:?}' after {}", kind, caller));
         Err(error)
+    }
+
+    fn get_identifier(&mut self) -> JSResult<Expr> {
+        let current_span = self.current_token.get_span();
+        let source_value = self
+            .interpreter
+            .get_source_at_span(&current_span)
+            .to_string();
+        check_identifier(&source_value)?;
+        let idx = get_or_intern_string(&source_value);
+        self.next_token();
+        Ok(Expr::new_identifier(&idx))
     }
 }

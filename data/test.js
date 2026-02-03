@@ -1,7 +1,7 @@
 let x = 0;
 
-for (let i = 1; i < 20; i *= 2) {
-    x -= 2;
+function hotdog(a1, a2) {
+    x = a1 + a2;
 }
 
-x;
+hotdog(5, 6);
