@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, error, warn};
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -45,6 +45,11 @@ impl Interpreter {
         }
     }
 
+    pub fn setup(mut self) -> Self {
+        JSObject::create_global_this(&mut self);
+        self
+    }
+
     pub fn interpret(&mut self, source: &str) -> Result<(), String> {
         self.source = source.to_owned();
         let tokens = self.lex()?;
@@ -53,21 +58,14 @@ impl Interpreter {
         let statements = parser.parse();
 
         for statement in statements {
+            debug!("raw_statement: {statement}");
             let res = statement.evaluate(self);
             match res {
                 Ok(value) => {
-                    println!("{}", debug_value(self, &value));
-                    // let string_sym = value.to_string(self).unwrap(); // TODO - fix this later
-                    // let string_value = get_string_from_pool_unchecked(&string_sym);
-                    // // add quotes in
-                    // if value.is_string() {
-                    //     println!("'{string_value}'");
-                    // } else {
-                    //     println!("{string_value}");
-                    // }
+                    debug!("debug_value: {}", debug_value(self, &value));
                 }
                 Err(e) => {
-                    println!("{}", e.message);
+                    error!("{}", e.message);
                 }
             }
         }
@@ -180,7 +178,9 @@ impl Interpreter {
         current_env.expire();
         let parent = current_env.get_parent_handle();
         if parent.is_none() {
-            panic!("Leave scope called on root for some reason");
+            // we're in root, likely a global scoped fn was called
+            warn!("Attempting to leave the global scope. Programmer error?");
+            return;
         }
         let parent_id = parent.unwrap();
         self.current_environment_handle = parent_id;
@@ -192,6 +192,7 @@ impl Interpreter {
             .unwrap();
         let var = self.get_var(var_id)?;
         var.update_value(value.clone())?;
+        debug!("var: {var:?}");
         Ok(JSValue::Undefined)
     }
 }

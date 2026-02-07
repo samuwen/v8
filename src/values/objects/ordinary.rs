@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use std::collections::HashMap;
 
 use string_interner::symbol::SymbolU32;
@@ -77,6 +74,11 @@ impl OrdinaryObject {
 
     pub fn get_property(&self, key: &SymbolU32) -> Option<&ObjectProperty> {
         self.properties.get(key)
+    }
+
+    pub fn add_property(&mut self, key: SymbolU32, value: JSValue) {
+        let prop = ObjectProperty::new_from_value(value);
+        self.properties.insert(key, prop);
     }
 
     pub fn debug(&self, interpreter: &mut Interpreter) -> String {

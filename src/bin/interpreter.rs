@@ -18,7 +18,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let mut rl = DefaultEditor::new()?;
     let mut ctrl_c_once = false;
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::new().setup();
 
     // we're in file land, don't need the repl
     if args.path.is_some() {

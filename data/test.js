@@ -1,15 +1,4 @@
-// const object = {
-//     console: {
-//         log: function (s) {
-//             s;
-//         },
-//     },
-// };
+const x = 5;
+const y = 6;
 
-// object;
-
-const x = (v1, v2, v3, v4) => {
-    return v1 * v2 + v3 * v4;
-};
-
-x(1, 2, 3, 4);
+console.log(x, y);

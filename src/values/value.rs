@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use std::{
     mem::discriminant,
     sync::{Mutex, OnceLock},
@@ -35,12 +32,6 @@ fn get_new_symbol_id() -> usize {
     let value = counter.clone();
     *counter += 1;
     value
-}
-
-#[derive(Clone, Debug)]
-pub enum ArrowFunctionReturn {
-    Expr(Box<Expr>),
-    Stmt(Box<Stmt>),
 }
 
 #[derive(Clone, Debug)]
@@ -211,22 +202,6 @@ impl JSValue {
 
     pub fn new_string(s: &SymbolU32) -> Self {
         Self::String { data: *s }
-    }
-
-    pub fn new_arrow_function(
-        args: Vec<Expr>,
-        body: ArrowFunctionReturn,
-        interpreter: &mut Interpreter,
-    ) -> Self {
-        match body {
-            ArrowFunctionReturn::Expr(expr) => {
-                let stmt = Box::new(Stmt::new_return(Some(*expr))); // just make it into a return statement
-                todo!()
-            }
-            ArrowFunctionReturn::Stmt(stmt) => {
-                todo!()
-            }
-        }
     }
 
     pub fn new_array(args: Vec<Expr>) -> Self {

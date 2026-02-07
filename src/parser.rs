@@ -3,18 +3,15 @@
 
 use std::{iter::Peekable, vec::IntoIter};
 
-use log::debug;
-use string_interner::symbol::SymbolU32;
-
 use crate::{
-    Interpreter, debug_value,
+    Interpreter,
     errors::JSError,
     expr::Expr,
     global::get_or_intern_string,
     stmt::Stmt,
     token::{Kind, Token},
     utils::check_identifier,
-    values::{ArrowFunctionReturn, JSResult, JSValue},
+    values::{JSResult, JSValue},
 };
 
 pub struct Parser<'a> {
@@ -463,7 +460,13 @@ impl<'a> Parser<'a> {
                     let value = value_expr.evaluate(self.interpreter)?;
                     properties.push((key_index, value));
 
-                    if !self.current_token.is_kind(&Kind::Comma) {
+                    // if we have a comma, check if it is danglng. if no comma or the peek value is not an ident, break
+                    let temp_eof = Token::new_eof();
+                    let peeked = self.peek().unwrap_or(&temp_eof).clone();
+                    if !self.current_token.is_kind(&Kind::Comma)
+                        || peeked.is_kind(&Kind::RightCurly)
+                    {
+                        self.next_token();
                         break;
                     }
                     self.next_token();
@@ -471,8 +474,6 @@ impl<'a> Parser<'a> {
 
                 self.expect_and_consume(&Kind::RightCurly, "ObjectExpression")?;
                 let object = JSValue::new_object(properties, self.interpreter);
-                let s = debug_value(self.interpreter, &object);
-                println!("{s}");
                 return Ok(Expr::new_literal(object));
             }
             Kind::Function => {
@@ -516,7 +517,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn _peek(&mut self) -> Option<&Token> {
+    fn peek(&mut self) -> Option<&Token> {
         self.tokens.peek()
     }
 

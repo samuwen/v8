@@ -20,6 +20,8 @@ pub fn get_string_from_pool(sym: &SymbolU32) -> Option<String> {
 #[allow(dead_code)]
 #[cfg(debug_assertions)]
 pub fn dump_pool() {
+    use log::debug;
+
     let interner = get_interner().lock().unwrap();
-    interner.iter().for_each(|item| println!("{:?}", item));
+    interner.iter().for_each(|item| debug!("{:?}", item));
 }

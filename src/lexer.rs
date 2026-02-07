@@ -240,7 +240,7 @@ impl<'a> Lexer<'a> {
 
     pub fn replay_errors(&mut self) {
         for error in &self.errors {
-            println!("{error}");
+            eprintln!("{error}");
         }
     }
 

@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use std::fmt;
 
 use log::debug;
@@ -9,12 +6,18 @@ use string_interner::symbol::SymbolU32;
 use crate::{
     Interpreter,
     errors::JSError,
-    global::get_or_intern_string,
+    global::{get_or_intern_string, get_string_from_pool},
     stmt::Stmt,
     token::{Kind, Token},
     utils::get_function_params,
     values::{JSObject, JSResult, JSValue},
 };
+
+#[derive(Clone, Debug)]
+pub enum LogKind {
+    Log,
+    Error,
+}
 
 #[derive(Clone, Debug)]
 pub enum Expr {
@@ -56,6 +59,10 @@ pub enum Expr {
         identifier: Option<Box<Expr>>,
         arguments: Vec<Expr>,
         body: Box<Stmt>,
+    },
+    // internal only
+    PrintExpr {
+        kind: LogKind,
     },
 }
 
@@ -129,6 +136,10 @@ impl Expr {
             arguments,
             body: Box::new(body),
         }
+    }
+
+    pub fn new_print_expr(kind: LogKind) -> Self {
+        Self::PrintExpr { kind }
     }
 
     pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
@@ -250,7 +261,6 @@ impl Expr {
                     .collect::<JSResult<Vec<JSValue>>>()?;
                 // the evaluation gets the object back out of the heap
                 let value = identifier.evaluate(interpreter)?;
-                let obj_id = value.get_object_id()?;
                 let object = value.get_object(interpreter)?.clone();
                 let result = object.call(args, interpreter)?;
                 Ok(result)
@@ -290,6 +300,29 @@ impl Expr {
 
                 // function expressions return the function itself
                 Ok(JSValue::Object { object_id })
+            }
+            Expr::PrintExpr { kind } => {
+                let data = get_or_intern_string("data");
+                let variable = interpreter.get_variable_from_current_environment(data);
+                if let Some(var_id) = variable {
+                    let var = interpreter.get_var(var_id)?;
+                    debug!("{var:?}");
+                    let value = var.get_value();
+                    let s = value.to_string(interpreter)?;
+                    let s = get_string_from_pool(&s);
+                    if let Some(out) = s {
+                        match kind {
+                            LogKind::Log => {
+                                println!("{out}");
+                            }
+                            LogKind::Error => {
+                                eprintln!("{out}");
+                            }
+                        }
+                    }
+                }
+
+                Ok(JSValue::Undefined)
             }
         }
     }
@@ -354,6 +387,9 @@ impl fmt::Display for Expr {
                         .clone()
                         .unwrap_or(Box::new(Expr::new_literal(JSValue::Undefined)))
                 )
+            }
+            Expr::PrintExpr { kind } => {
+                write!(f, "Console.{kind:?}",)
             }
         }
     }

@@ -1,13 +1,11 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use std::fmt;
+
+use log::info;
 
 use crate::{
     Interpreter,
     errors::{ErrorKind, JSError},
     expr::Expr,
-    global::get_string_from_pool,
     utils::get_function_params,
     values::{JSObject, JSResult, JSValue},
 };
@@ -109,7 +107,7 @@ impl Stmt {
             Stmt::Block(stmts) => {
                 for stmt in stmts {
                     let res = stmt.evaluate(interpreter)?;
-                    println!("statement result: {res:?}");
+                    info!("statement result: {res:?}");
                 }
                 Ok(JSValue::Undefined)
             }

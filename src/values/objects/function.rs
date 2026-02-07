@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use log::{debug, info};
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct FunctionObject {
     prototype: Option<usize>,
-    property_map: HashMap<SymbolU32, ObjectProperty>,
+    properties: HashMap<SymbolU32, ObjectProperty>,
     call: Box<Stmt>, // create the statement wrapper around it before passing it thru
     environment_id: usize,
     formal_parameters: Vec<SymbolU32>,
@@ -23,7 +24,7 @@ impl FunctionObject {
         let map = HashMap::new();
         Self {
             prototype: None,
-            property_map: map,
+            properties: map,
             call,
             environment_id,
             formal_parameters: parameters,
@@ -36,6 +37,7 @@ impl FunctionObject {
         interpreter: &mut Interpreter,
     ) -> JSResult<JSValue> {
         interpreter.enter_scope(Some(self.environment_id));
+        debug!("{:?}", arguments);
         let args = arguments.iter();
         for (param, arg) in self.formal_parameters.iter().zip(args) {
             interpreter.bind_variable(*param, arg)?;
@@ -59,5 +61,9 @@ impl FunctionObject {
 
     pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
         todo!()
+    }
+
+    pub fn debug(&self, interpreter: &mut Interpreter) -> String {
+        format!("Function! idk whats in it")
     }
 }

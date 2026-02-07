@@ -11,8 +11,10 @@ use string_interner::symbol::SymbolU32;
 use crate::{
     Interpreter,
     expr::Expr,
+    global::get_or_intern_string,
     stmt::Stmt,
     values::{JSResult, JSValue, PreferredType},
+    variable::Variable,
 };
 
 pub type ObjectId = usize;
@@ -43,10 +45,32 @@ impl JSObject {
         interpreter.add_object(object)
     }
 
-    // pub fn create_global_this(interpreter: &mut Interpreter) -> Self {
-    //     // let call_stmt = Stmt::new_expression(Expr::new_function_call(Expr::new_literal(JSValue::new_), arguments))
-    //     // let console = JSObject::new_function_object(call, params, environment_id, interpreter)
-    // }
+    /// Setup the initial global object. Initially just for console
+    pub fn create_global_this(interpreter: &mut Interpreter) {
+        let print_expr = Expr::new_print_expr(crate::expr::LogKind::Log);
+        let call_stmt = Stmt::new_expression(print_expr);
+        let scope_id = interpreter.enter_scope(None);
+        let data_id = get_or_intern_string("data");
+        let parameters = vec![data_id];
+        for param in &parameters {
+            interpreter.new_variable(*param, true, JSValue::Undefined);
+        }
+        interpreter.leave_scope();
+        let log_fn_id =
+            JSObject::new_function_object(Box::new(call_stmt), parameters, scope_id, interpreter);
+        let log_value = JSValue::Object {
+            object_id: log_fn_id,
+        };
+        let console_id = get_or_intern_string("console");
+        let log_id = get_or_intern_string("log");
+        let console_object = JSObject::new_ordinary_object(vec![(log_id, log_value)], interpreter);
+        let console_value = JSValue::Object {
+            object_id: console_object,
+        };
+        interpreter.new_variable(console_id, false, console_value);
+
+        // let _global_this = JSObject::new_ordinary_object(vec![(console_id, console_value)], interpreter);
+    }
 
     pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
         match self {
@@ -93,7 +117,7 @@ impl JSObject {
     pub fn debug(&self, interpreter: &mut Interpreter) -> String {
         match self {
             JSObject::Ordinary(ordinary_object) => ordinary_object.debug(interpreter),
-            JSObject::Function(function_object) => todo!(),
+            JSObject::Function(function_object) => function_object.debug(interpreter),
         }
     }
 }
