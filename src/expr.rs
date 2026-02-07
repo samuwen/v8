@@ -10,8 +10,10 @@ use crate::{
     Interpreter,
     errors::JSError,
     global::get_or_intern_string,
+    stmt::Stmt,
     token::{Kind, Token},
-    values::{JSResult, JSValue},
+    utils::get_function_params,
+    values::{JSObject, JSResult, JSValue},
 };
 
 #[derive(Clone, Debug)]
@@ -49,6 +51,11 @@ pub enum Expr {
     Postfix {
         left: Box<Expr>,
         operator: Token,
+    },
+    FunctionDecl {
+        identifier: Option<Box<Expr>>,
+        arguments: Vec<Expr>,
+        body: Box<Stmt>,
     },
 }
 
@@ -109,6 +116,18 @@ impl Expr {
         Self::Postfix {
             left: Box::new(left),
             operator,
+        }
+    }
+
+    pub fn new_function_decl(
+        identifier: Option<Box<Expr>>,
+        arguments: Vec<Expr>,
+        body: Stmt,
+    ) -> Self {
+        Self::FunctionDecl {
+            identifier,
+            arguments,
+            body: Box::new(body),
         }
     }
 
@@ -248,6 +267,29 @@ impl Expr {
                 }
 
                 Err(JSError::new("Object called with invalid property"))
+            } // implement function expressions and arrow functions
+            Expr::FunctionDecl {
+                identifier,
+                arguments,
+                body,
+            } => {
+                let ident = if let Some(id) = identifier {
+                    id.evaluate(interpreter)?
+                } else {
+                    JSValue::Undefined
+                };
+                let ident_id = ident.to_string(interpreter)?;
+                let scope_id = interpreter.enter_scope(None);
+                let parameters = get_function_params(arguments, interpreter)?;
+                for param in &parameters {
+                    interpreter.new_variable(*param, true, JSValue::Undefined);
+                }
+                interpreter.leave_scope();
+                let object_id =
+                    JSObject::new_function_object(body.clone(), parameters, scope_id, interpreter);
+
+                // function expressions return the function itself
+                Ok(JSValue::Object { object_id })
             }
         }
     }
@@ -288,13 +330,30 @@ impl fmt::Display for Expr {
                 identifier,
                 arguments,
             } => {
-                let ident = format!("{identifier}");
                 let args = arguments
                     .iter()
                     .map(|arg| format!("{arg}"))
                     .collect::<Vec<String>>()
                     .join(", ");
-                write!(f, "FunctionCall {ident}({args})")
+                write!(f, "FunctionCall {identifier}({args})")
+            }
+            Expr::FunctionDecl {
+                identifier,
+                arguments,
+                body,
+            } => {
+                let args = arguments
+                    .iter()
+                    .map(|arg| format!("{arg}"))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "FunctionDecl {}({args}) {{ {body} }}",
+                    identifier
+                        .clone()
+                        .unwrap_or(Box::new(Expr::new_literal(JSValue::Undefined)))
+                )
             }
         }
     }

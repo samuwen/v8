@@ -7,6 +7,7 @@ use crate::{
     Interpreter,
     errors::{ErrorKind, JSError},
     expr::Expr,
+    global::get_string_from_pool,
     utils::get_function_params,
     values::{JSObject, JSResult, JSValue},
 };
@@ -213,7 +214,16 @@ impl Stmt {
                 // right hand side is either the expr evaluation or undefined
                 let rhs = match initializer {
                     Some(init_expr) => init_expr.evaluate(interpreter)?,
-                    None => JSValue::Undefined,
+                    None => {
+                        // uninitialized const is a syntax error
+                        if !*is_mutable {
+                            let error = JSError::new(
+                                "Uncaught SyntaxError: Missing initializer in const declaration",
+                            );
+                            return Err(error);
+                        }
+                        JSValue::Undefined
+                    }
                 };
                 // add a new variable to the variable heap
                 interpreter.new_variable(str_id, *is_mutable, rhs);

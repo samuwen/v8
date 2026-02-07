@@ -1,13 +1,10 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use std::collections::HashMap;
 
 use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
-    errors::{ErrorKind, JSError},
+    errors::ErrorKind,
     stmt::Stmt,
     values::{JSResult, JSValue, PreferredType, objects::ObjectProperty},
 };

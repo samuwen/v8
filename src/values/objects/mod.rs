@@ -43,6 +43,11 @@ impl JSObject {
         interpreter.add_object(object)
     }
 
+    // pub fn create_global_this(interpreter: &mut Interpreter) -> Self {
+    //     // let call_stmt = Stmt::new_expression(Expr::new_function_call(Expr::new_literal(JSValue::new_), arguments))
+    //     // let console = JSObject::new_function_object(call, params, environment_id, interpreter)
+    // }
+
     pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
         match self {
             JSObject::Ordinary(ordinary_object) => ordinary_object.to_primitive(hint),

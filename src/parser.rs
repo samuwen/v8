@@ -384,17 +384,7 @@ impl<'a> Parser<'a> {
                     self.next_token();
                     self.expect_and_consume(&Kind::Arrow, "ArrowFunction")?;
                     let raw_body = self.handle_statements()?;
-                    let body = if let Stmt::Expression(expr) = raw_body {
-                        ArrowFunctionReturn::Expr(expr)
-                    } else {
-                        ArrowFunctionReturn::Stmt(Box::new(raw_body))
-                    };
-
-                    return Ok(Expr::new_literal(JSValue::new_arrow_function(
-                        vec![],
-                        body,
-                        self.interpreter,
-                    )));
+                    return Ok(Expr::new_function_decl(None, vec![], raw_body));
                 }
 
                 let expr = self.handle_expressions()?;
@@ -411,34 +401,19 @@ impl<'a> Parser<'a> {
                     self.expect_and_consume(&Kind::Arrow, "ArrowFunction")?;
 
                     let body = if self.current_token.is_kind(&Kind::LeftCurly) {
-                        let stmt = self.handle_statements()?;
-                        ArrowFunctionReturn::Stmt(Box::new(stmt))
+                        self.handle_statements()?
                     } else {
                         let expr = self.handle_expressions()?;
-                        ArrowFunctionReturn::Expr(Box::new(expr))
+                        Stmt::new_expression(expr)
                     };
 
-                    Ok(Expr::new_literal(JSValue::new_arrow_function(
-                        args,
-                        body,
-                        self.interpreter,
-                    )))
+                    return Ok(Expr::new_function_decl(None, args, body));
                 } else {
                     self.expect_and_consume(&Kind::RightParen, "Expression")?;
                     // if next token is an arrow we're in arrow land
                     if self.current_token.is_kind(&Kind::Arrow) {
                         let raw_body = self.handle_statements()?;
-                        let body = if let Stmt::Expression(expr) = raw_body {
-                            ArrowFunctionReturn::Expr(expr)
-                        } else {
-                            ArrowFunctionReturn::Stmt(Box::new(raw_body))
-                        };
-
-                        return Ok(Expr::new_literal(JSValue::new_arrow_function(
-                            vec![expr; 1],
-                            body,
-                            self.interpreter,
-                        )));
+                        return Ok(Expr::new_function_decl(None, vec![], raw_body));
                     }
                     // otherwise its just a parenthetical
                     Ok(Expr::new_grouping(expr))
@@ -501,33 +476,35 @@ impl<'a> Parser<'a> {
                 return Ok(Expr::new_literal(object));
             }
             Kind::Function => {
-                self.next_token();
-                // weird literal function expression syntax
+                // Left Paren - no identifier found
                 let ident = if self.current_token.is_kind(&Kind::LeftParen) {
                     None
                 } else {
-                    let expr = self.handle_expressions()?;
-                    Some(expr)
+                    // we have an identifier, consume it and move on
+                    let expr = self.get_identifier()?;
+                    Some(Box::new(expr))
                 };
+
+                // we should have the start of the parameters here
                 self.expect_and_consume(&Kind::LeftParen, "FunctionExpression")?;
 
                 let parameters = if self.current_token.is_kind(&Kind::RightParen) {
                     vec![]
                 } else {
                     let mut params = Vec::with_capacity(6); // that'd be a lotta args
-                    let first_param = self.handle_expressions()?;
+                    let first_param = self.get_identifier()?;
                     params.push(first_param);
                     while self.current_token.is_kind(&Kind::Comma) {
                         self.next_token();
-                        let param = self.handle_expressions()?;
+                        let param = self.get_identifier()?;
                         params.push(param);
                     }
                     params
                 };
                 self.expect_and_consume(&Kind::RightParen, "FunctionExpression")?;
                 let body = self.handle_statements()?;
-                let created = JSValue::new_function(ident, parameters, body, self.interpreter)?;
-                Ok(Expr::new_literal(created))
+                let expr = Expr::new_function_decl(ident, parameters, body);
+                Ok(expr)
             }
             token => Err(JSError::new(&format!("Unexpected token: {:?}", token))),
         }
