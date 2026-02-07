@@ -204,8 +204,9 @@ impl JSValue {
         Self::String { data: *s }
     }
 
-    pub fn new_array(args: Vec<Expr>) -> Self {
-        todo!()
+    pub fn new_array(properties: Properties, interpreter: &mut Interpreter) -> Self {
+        let object_id = JSObject::new_array_object(properties, interpreter);
+        Self::Object { object_id }
     }
 
     pub fn new_function(

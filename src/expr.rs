@@ -259,10 +259,16 @@ impl Expr {
                         Ok(res)
                     })
                     .collect::<JSResult<Vec<JSValue>>>()?;
-                // the evaluation gets the object back out of the heap
+                // get variable out of local environment
+                let idx = if let Expr::Identifier { string_index } = **identifier {
+                    string_index
+                } else {
+                    get_or_intern_string("data")
+                };
+
                 let value = identifier.evaluate(interpreter)?;
                 let object = value.get_object(interpreter)?.clone();
-                let result = object.call(args, interpreter)?;
+                let result = object.call(args, &idx, interpreter)?;
                 Ok(result)
             }
             Expr::ObjectCall { identifier, expr } => {

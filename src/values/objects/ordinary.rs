@@ -76,9 +76,10 @@ impl OrdinaryObject {
         self.properties.get(key)
     }
 
-    pub fn add_property(&mut self, key: SymbolU32, value: JSValue) {
-        let prop = ObjectProperty::new_from_value(value);
-        self.properties.insert(key, prop);
+    pub fn call(&self, name: &SymbolU32) -> JSResult<JSValue> {
+        let s = get_string_from_pool(name).unwrap_or("anonymous".to_string());
+        let error = JSError::new(&format!("Uncaught TypeError: {s} is not a function"));
+        Err(error)
     }
 
     pub fn debug(&self, interpreter: &mut Interpreter) -> String {

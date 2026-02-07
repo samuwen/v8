@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use log::{debug, info};
+use log::debug;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
 pub struct FunctionObject {
     prototype: Option<usize>,
     properties: HashMap<SymbolU32, ObjectProperty>,
-    call: Box<Stmt>, // create the statement wrapper around it before passing it thru
+    call: Box<Stmt>,
     environment_id: usize,
     formal_parameters: Vec<SymbolU32>,
 }

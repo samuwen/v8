@@ -3,6 +3,8 @@
 
 use std::{iter::Peekable, vec::IntoIter};
 
+use string_interner::symbol::SymbolU32;
+
 use crate::{
     Interpreter,
     errors::JSError,
@@ -419,20 +421,37 @@ impl<'a> Parser<'a> {
             Kind::LeftSquare => {
                 if self.current_token.is_kind(&Kind::RightSquare) {
                     self.next_token();
-                    return Ok(Expr::new_literal(JSValue::new_array(vec![])));
+                    return Ok(Expr::new_literal(JSValue::new_array(
+                        vec![],
+                        self.interpreter,
+                    )));
                 }
-                // js ecosystem typically frowns on this many arguments
-                let mut expressions = Vec::with_capacity(6);
-                let expr = self.handle_expressions()?;
-                expressions.push(expr);
-                while self.current_token.is_kind(&Kind::Comma) {
-                    self.next_token();
+                let mut expressions = Vec::with_capacity(10);
+                loop {
                     let expr = self.handle_expressions()?;
                     expressions.push(expr);
+                    if !self.current_token.is_kind(&Kind::Comma) {
+                        break;
+                    }
+                    self.next_token();
                 }
 
                 self.expect_and_consume(&Kind::RightSquare, "ArrayExpression")?;
-                Ok(Expr::new_literal(JSValue::new_array(expressions)))
+
+                let properties = expressions
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, expr)| {
+                        let val = expr.evaluate(self.interpreter)?;
+                        let idx_val = idx.to_string();
+                        let idx_sym = get_or_intern_string(&idx_val);
+                        Ok((idx_sym, val))
+                    })
+                    .collect::<JSResult<Vec<(SymbolU32, JSValue)>>>()?;
+                Ok(Expr::new_literal(JSValue::new_array(
+                    properties,
+                    self.interpreter,
+                )))
             }
             Kind::LeftCurly => {
                 if self.current_token.is_kind(&Kind::RightCurly) {
@@ -463,9 +482,9 @@ impl<'a> Parser<'a> {
                     // if we have a comma, check if it is danglng. if no comma or the peek value is not an ident, break
                     let temp_eof = Token::new_eof();
                     let peeked = self.peek().unwrap_or(&temp_eof).clone();
-                    if !self.current_token.is_kind(&Kind::Comma)
-                        || peeked.is_kind(&Kind::RightCurly)
-                    {
+                    if !self.current_token.is_kind(&Kind::Comma) {
+                        break;
+                    } else if peeked.is_kind(&Kind::RightCurly) {
                         self.next_token();
                         break;
                     }

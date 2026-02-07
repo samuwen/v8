@@ -65,7 +65,7 @@ impl Interpreter {
                     debug!("debug_value: {}", debug_value(self, &value));
                 }
                 Err(e) => {
-                    error!("{}", e.message);
+                    eprintln!("{}", e.message);
                 }
             }
         }

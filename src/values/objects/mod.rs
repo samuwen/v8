@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+mod array;
 mod function;
 mod ordinary;
 
@@ -13,8 +14,7 @@ use crate::{
     expr::Expr,
     global::get_or_intern_string,
     stmt::Stmt,
-    values::{JSResult, JSValue, PreferredType},
-    variable::Variable,
+    values::{JSResult, JSValue, PreferredType, objects::array::Array},
 };
 
 pub type ObjectId = usize;
@@ -26,6 +26,7 @@ pub const CALL: &'static str = "call";
 pub enum JSObject {
     Ordinary(OrdinaryObject),
     Function(FunctionObject),
+    Array(Array),
 }
 
 impl JSObject {
@@ -42,6 +43,12 @@ impl JSObject {
         interpreter: &mut Interpreter,
     ) -> usize {
         let object = JSObject::Function(FunctionObject::new(call, environment_id, params));
+        interpreter.add_object(object)
+    }
+
+    pub fn new_array_object(properties: Properties, interpreter: &mut Interpreter) -> usize {
+        let ordinary = Array::new(properties, interpreter);
+        let object = JSObject::Array(ordinary);
         interpreter.add_object(object)
     }
 
@@ -76,13 +83,14 @@ impl JSObject {
         match self {
             JSObject::Ordinary(ordinary_object) => ordinary_object.to_primitive(hint),
             JSObject::Function(function_object) => function_object.to_primitive(hint),
+            JSObject::Array(array) => todo!(),
         }
     }
 
     pub fn is_function(&self) -> bool {
         match self {
-            JSObject::Ordinary(_) => false,
             JSObject::Function(_) => true,
+            _ => false,
         }
     }
 
@@ -90,6 +98,7 @@ impl JSObject {
         match self {
             JSObject::Ordinary(ordinary) => ordinary.value_of(),
             JSObject::Function(function) => todo!(),
+            JSObject::Array(array) => todo!(),
         }
     }
 
@@ -97,13 +106,20 @@ impl JSObject {
         match self {
             JSObject::Ordinary(ordinary) => ordinary.to_string(),
             JSObject::Function(function) => todo!(),
+            JSObject::Array(array) => todo!(),
         }
     }
 
-    pub fn call(&self, args: Vec<JSValue>, interpreter: &mut Interpreter) -> JSResult<JSValue> {
+    pub fn call(
+        &self,
+        args: Vec<JSValue>,
+        name: &SymbolU32,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<JSValue> {
         match self {
-            JSObject::Ordinary(ordinary_object) => todo!(),
+            JSObject::Ordinary(ordinary_object) => ordinary_object.call(name),
             JSObject::Function(object) => object.call(args, interpreter),
+            JSObject::Array(array) => todo!(),
         }
     }
 
@@ -111,6 +127,7 @@ impl JSObject {
         match self {
             JSObject::Ordinary(ordinary_object) => ordinary_object.get_property(key),
             JSObject::Function(function_object) => todo!(),
+            JSObject::Array(array) => array.get_property(key),
         }
     }
 
@@ -118,6 +135,7 @@ impl JSObject {
         match self {
             JSObject::Ordinary(ordinary_object) => ordinary_object.debug(interpreter),
             JSObject::Function(function_object) => function_object.debug(interpreter),
+            JSObject::Array(array) => todo!(),
         }
     }
 }
