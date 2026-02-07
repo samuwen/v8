@@ -3,8 +3,11 @@
 
 use std::{iter::Peekable, vec::IntoIter};
 
+use log::debug;
+use string_interner::symbol::SymbolU32;
+
 use crate::{
-    Interpreter,
+    Interpreter, debug_value,
     errors::JSError,
     expr::Expr,
     global::get_or_intern_string,
@@ -195,7 +198,7 @@ impl<'a> Parser<'a> {
     }
 
     fn handle_assignment(&mut self) -> JSResult<Expr> {
-        let mut left = self.handle_call()?; // this either gets a call chain or an identifier
+        let mut left = self.handle_equality()?;
         if self.current_token.is_kinds(vec![
             Kind::Equals,
             Kind::PlusEquals,
@@ -205,12 +208,7 @@ impl<'a> Parser<'a> {
         ]) {
             let op_token = self.current_token.clone();
             self.next_token();
-            let peek = self._peek().ok_or(JSError::new("Unexpected EOF"))?;
-            let right = if peek.is_kind(&Kind::Equals) {
-                self.handle_assignment()?
-            } else {
-                self.handle_equality()?
-            };
+            let right = self.handle_assignment()?;
             if op_token.is_kind(&Kind::Equals) {
                 // if normal do it normally
                 left = Expr::new_assignment(left, right);
@@ -236,10 +234,11 @@ impl<'a> Parser<'a> {
 
     fn handle_equality(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_comparisons()?;
-        while self
-            .current_token
-            .is_kinds(vec![Kind::EqualEqual, Kind::NotEqual])
-        {
+        while self.current_token.is_kinds(vec![
+            Kind::EqualEqualEqual,
+            Kind::EqualEqual,
+            Kind::NotEqual,
+        ]) {
             let operator = self.current_token.clone();
             self.next_token();
             let right = self.handle_comparisons()?;
@@ -321,10 +320,9 @@ impl<'a> Parser<'a> {
             match prev.get_kind() {
                 Kind::Dot => {
                     let ident = self.get_identifier()?;
-                    left = Expr::new_object_call(ident);
+                    left = Expr::new_object_call(left, ident);
                 }
                 Kind::LeftParen => {
-                    println!("{left}");
                     let args = if self.current_token.is_kind(&Kind::RightParen) {
                         vec![]
                     } else {
@@ -344,7 +342,7 @@ impl<'a> Parser<'a> {
                 Kind::LeftSquare => {
                     let expr = self.handle_expressions()?;
                     self.expect_and_consume(&Kind::RightSquare, "CallExpr")?;
-                    left = Expr::new_object_call(expr);
+                    left = Expr::new_object_call(left, expr);
                 }
                 _ => (),
             }
@@ -497,10 +495,10 @@ impl<'a> Parser<'a> {
                 }
 
                 self.expect_and_consume(&Kind::RightCurly, "ObjectExpression")?;
-                return Ok(Expr::new_literal(JSValue::new_object(
-                    properties,
-                    self.interpreter,
-                )));
+                let object = JSValue::new_object(properties, self.interpreter);
+                let s = debug_value(self.interpreter, &object);
+                println!("{s}");
+                return Ok(Expr::new_literal(object));
             }
             Kind::Function => {
                 self.next_token();

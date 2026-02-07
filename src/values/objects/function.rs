@@ -7,6 +7,7 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
+    errors::{ErrorKind, JSError},
     stmt::Stmt,
     values::{JSResult, JSValue, PreferredType, objects::ObjectProperty},
 };
@@ -42,7 +43,19 @@ impl FunctionObject {
         for (param, arg) in self.formal_parameters.iter().zip(args) {
             interpreter.bind_variable(*param, arg)?;
         }
-        let result = self.call.evaluate(interpreter)?;
+        let result = self.call.evaluate(interpreter);
+        let result = match result {
+            Ok(v) => v,
+            Err(e) => match e.kind {
+                ErrorKind::Return(id) => {
+                    let value = interpreter.get_value(id)?;
+                    value.clone()
+                }
+                _ => {
+                    return Err(e);
+                }
+            },
+        };
         interpreter.leave_scope();
         Ok(result)
     }

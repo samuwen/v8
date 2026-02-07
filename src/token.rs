@@ -223,6 +223,8 @@ impl Token {
             | Kind::LessThanOrEquals
             | Kind::GreaterThan
             | Kind::GreaterThanOrEquals
+            | Kind::EqualEqual
+            | Kind::EqualEqualEqual
             | Kind::Percent => true,
             _ => false,
         }

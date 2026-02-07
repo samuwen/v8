@@ -32,8 +32,8 @@ impl Environment {
             return true;
         }
         if let Some(parent) = self.parent_id {
-            let parent_env = interpreter.environment_heap.get_item_from_id(parent);
-            if parent_env.is_none() {
+            let parent_env = interpreter.get_environment(parent);
+            if parent_env.is_err() {
                 return false;
             }
             let parent_env = parent_env.unwrap();
@@ -48,7 +48,7 @@ impl Environment {
             return Some(*handle);
         }
         if let Some(parent) = self.parent_id {
-            let parent_env = interpreter.environment_heap.get_item_from_id(parent)?;
+            let parent_env = interpreter.get_environment(parent).ok()?;
             return parent_env.get_variable(string_id, interpreter);
         }
         None

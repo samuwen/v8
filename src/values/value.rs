@@ -111,10 +111,7 @@ impl JSValue {
             }
             JSValue::Number { data } => *data,
             JSValue::Object { object_id } => {
-                let object = interpreter
-                    .object_heap
-                    .get_mut(*object_id)
-                    .ok_or(JSError::new_not_found("Object", *object_id))?;
+                let object = interpreter.get_object_mut(*object_id)?;
                 let prim_value = object.to_primitive(PreferredType::Number)?;
                 prim_value.to_number(interpreter)?
             }
@@ -141,10 +138,7 @@ impl JSValue {
             JSValue::Number { data } => get_or_intern_string(&data.to_string()),
             JSValue::BigInt => todo!(),
             JSValue::Object { object_id } => {
-                let object = interpreter
-                    .object_heap
-                    .get_mut(*object_id)
-                    .ok_or(JSError::new_not_found("Object", *object_id))?;
+                let object = interpreter.get_object(*object_id)?;
                 let prim_value = object.to_primitive(PreferredType::String)?;
                 prim_value.to_string(interpreter)?
             }
@@ -210,10 +204,7 @@ impl JSValue {
 
     pub fn get_object<'a>(&'a self, interpreter: &'a Interpreter) -> JSResult<&'a JSObject> {
         if let JSValue::Object { object_id } = self {
-            let value = interpreter
-                .get_object_from_heap(*object_id)
-                .ok_or(JSError::new_not_found("Object", *object_id))?;
-            return Ok(value);
+            return interpreter.get_object(*object_id);
         }
         Err(JSError::new("Expected object"))
     }
@@ -345,6 +336,7 @@ impl JSValue {
                 let value = gt || eq;
                 return Ok(JSValue::new_boolean(&value));
             }
+            Kind::EqualEqualEqual => return Ok(JSValue::new_boolean(&equal(l_num, r_num))),
             _ => panic!("the disco"),
         };
         Ok(JSValue::new_number(&result))

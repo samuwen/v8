@@ -6,18 +6,17 @@ use std::collections::HashMap;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
-    Interpreter,
+    Interpreter, debug_value,
     errors::JSError,
-    global::get_or_intern_string,
+    global::{get_or_intern_string, get_string_from_pool},
     values::{
         JSResult, JSValue, PreferredType,
-        objects::{ObjectId, ObjectProperty, Properties, TO_PRIMITIVE_SYM},
+        objects::{ObjectProperty, Properties, TO_PRIMITIVE_SYM},
     },
 };
 
 #[derive(Clone, Debug)]
 pub struct OrdinaryObject {
-    id: ObjectId,
     extensible: bool,
     prototype: Option<usize>,
     properties: HashMap<SymbolU32, ObjectProperty>,
@@ -25,14 +24,12 @@ pub struct OrdinaryObject {
 
 impl OrdinaryObject {
     pub fn new(properties: Properties, interpreter: &mut Interpreter) -> Self {
-        let id = interpreter.object_heap.get_next_id();
         let map = HashMap::from_iter(
             properties
                 .into_iter()
                 .map(|(k, v)| (k, ObjectProperty::new_from_value(v))),
         );
         Self {
-            id,
             extensible: true,
             prototype: None,
             properties: map,
@@ -74,6 +71,27 @@ impl OrdinaryObject {
     }
 
     pub fn value_of(&self) -> JSResult<JSValue> {
-        Ok(JSValue::object_shallow_copy(self.id))
+        // Ok(JSValue::object_shallow_copy(self.id))
+        todo!()
+    }
+
+    pub fn get_property(&self, key: &SymbolU32) -> Option<&ObjectProperty> {
+        self.properties.get(key)
+    }
+
+    pub fn debug(&self, interpreter: &mut Interpreter) -> String {
+        let mut out = String::new();
+        out.push_str("{");
+        let mut props = vec![];
+        for (string_id, object_property) in &self.properties {
+            let string = get_string_from_pool(&string_id).unwrap_or("UNKNOWN".to_string());
+            let value = object_property.get_value().unwrap().clone();
+            let prop = format!(" {string}: {}", debug_value(interpreter, &value));
+            props.push(prop);
+        }
+        let prop_string = props.join(",");
+        out.push_str(&prop_string);
+        out.push_str(" }");
+        out
     }
 }

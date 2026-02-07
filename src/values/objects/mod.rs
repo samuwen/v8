@@ -28,8 +28,9 @@ pub enum JSObject {
 
 impl JSObject {
     pub fn new_ordinary_object(properties: Properties, interpreter: &mut Interpreter) -> usize {
-        let object = JSObject::Ordinary(OrdinaryObject::new(properties, interpreter));
-        interpreter.add_object_to_heap(object)
+        let ordinary = OrdinaryObject::new(properties, interpreter);
+        let object = JSObject::Ordinary(ordinary);
+        interpreter.add_object(object)
     }
 
     pub fn new_function_object(
@@ -39,7 +40,7 @@ impl JSObject {
         interpreter: &mut Interpreter,
     ) -> usize {
         let object = JSObject::Function(FunctionObject::new(call, environment_id, params));
-        interpreter.add_object_to_heap(object)
+        interpreter.add_object(object)
     }
 
     pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
@@ -74,6 +75,20 @@ impl JSObject {
         match self {
             JSObject::Ordinary(ordinary_object) => todo!(),
             JSObject::Function(object) => object.call(args, interpreter),
+        }
+    }
+
+    pub fn get_property(&self, key: &SymbolU32) -> Option<&ObjectProperty> {
+        match self {
+            JSObject::Ordinary(ordinary_object) => ordinary_object.get_property(key),
+            JSObject::Function(function_object) => todo!(),
+        }
+    }
+
+    pub fn debug(&self, interpreter: &mut Interpreter) -> String {
+        match self {
+            JSObject::Ordinary(ordinary_object) => ordinary_object.debug(interpreter),
+            JSObject::Function(function_object) => todo!(),
         }
     }
 }

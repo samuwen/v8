@@ -1,8 +1,11 @@
+use crate::heap::HeapId;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     Normal,
     Break,
     Continue,
+    Return(HeapId),
 }
 
 impl Default for ErrorKind {
@@ -49,6 +52,13 @@ impl JSError {
     pub fn new_continue() -> Self {
         Self {
             kind: ErrorKind::Continue,
+            message: String::new(),
+        }
+    }
+
+    pub fn new_return(id: HeapId) -> Self {
+        Self {
+            kind: ErrorKind::Return(id),
             message: String::new(),
         }
     }

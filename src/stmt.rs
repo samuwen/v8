@@ -188,7 +188,17 @@ impl Stmt {
                 }
                 Ok(JSValue::Undefined)
             }
-            Stmt::Return(expr) => todo!(),
+            Stmt::Return(expr) => {
+                if let Some(expr) = expr {
+                    let res = expr.evaluate(interpreter)?;
+                    let id = interpreter.add_value(res);
+                    let ret = JSError::new_return(id);
+                    return Err(ret);
+                }
+                // hacky
+                let id = interpreter.add_value(JSValue::new_undefined());
+                return Err(JSError::new_return(id));
+            }
             Stmt::VariableDecl {
                 is_mutable,
                 identifier,

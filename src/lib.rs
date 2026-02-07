@@ -3,8 +3,8 @@ use string_interner::symbol::SymbolU32;
 
 use crate::{
     environment::Environment,
-    errors::JSError,
-    heap::Heap,
+    global::get_string_from_pool,
+    heap::{Heap, HeapId},
     lexer::Lexer,
     parser::Parser,
     span::Span,
@@ -30,23 +30,18 @@ mod variable;
 #[allow(dead_code)]
 pub struct Interpreter {
     current_environment_handle: usize,
-    object_heap: Heap<JSObject>,
+    heap: Heap,
     source: String,
-    environment_heap: Heap<Environment>,
-    variable_heap: Heap<Variable>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        let mut environment_heap = Heap::new();
-        let id = environment_heap.add_new_item(Environment::new(None));
-        let variable_heap = Heap::new();
+        let mut heap = Heap::new();
+        let id = heap.add_environment(Environment::new(None));
         Self {
             current_environment_handle: id,
-            object_heap: Heap::new(),
+            heap,
             source: "".to_owned(), // lil hack
-            environment_heap,
-            variable_heap,
         }
     }
 
@@ -60,7 +55,8 @@ impl Interpreter {
         for statement in statements {
             let res = statement.evaluate(self);
             match res {
-                Ok(_value) => {
+                Ok(value) => {
+                    println!("{}", debug_value(self, &value));
                     // let string_sym = value.to_string(self).unwrap(); // TODO - fix this later
                     // let string_value = get_string_from_pool_unchecked(&string_sym);
                     // // add quotes in
@@ -99,32 +95,30 @@ impl Interpreter {
         result.to_string()
     }
 
-    fn add_variable_to_heap(&mut self, variable: Variable) -> usize {
-        self.variable_heap.add_new_item(variable)
+    fn add_var(&mut self, variable: Variable) -> usize {
+        self.heap.add_variable(variable)
     }
 
-    fn get_variable_from_heap(&mut self, var_id: usize) -> JSResult<&mut Variable> {
-        self.variable_heap
-            .get_mut(var_id)
-            .ok_or(JSError::new("Variable not found"))
+    fn get_var(&mut self, var_id: usize) -> JSResult<&mut Variable> {
+        self.heap.get_variable_mut(var_id)
     }
 
     fn new_variable(&mut self, ident_id: SymbolU32, is_mutable: bool, value: JSValue) {
         let var = Variable::new(is_mutable, value);
-        let var_id = self.add_variable_to_heap(var);
+        let var_id = self.add_var(var);
         self.add_variable_to_current_environment(ident_id, var_id);
     }
 
-    fn add_object_to_heap(&mut self, value: JSObject) -> usize {
-        self.object_heap.add_new_item(value)
+    fn add_object(&mut self, value: JSObject) -> usize {
+        self.heap.add_object(value)
     }
 
-    fn add_object_to_heap_with_id(&mut self, value: JSObject, id: usize) {
-        self.object_heap.add_new_item_with_id(value, id);
+    fn get_object(&self, obj_id: usize) -> JSResult<&JSObject> {
+        self.heap.get_object(obj_id)
     }
 
-    fn get_object_from_heap<'a>(&'a self, obj_id: usize) -> Option<&'a JSObject> {
-        self.object_heap.get_item_from_id(obj_id)
+    fn get_object_mut(&mut self, obj_id: usize) -> JSResult<&mut JSObject> {
+        self.heap.get_object_mut(obj_id)
     }
 
     fn add_variable_to_current_environment(&mut self, str_id: SymbolU32, var_id: usize) {
@@ -141,19 +135,33 @@ impl Interpreter {
         current_environment.get_variable(string_id, self)
     }
 
-    fn get_current_environment(&self) -> Option<&Environment> {
-        self.environment_heap
-            .get_item_from_id(self.current_environment_handle)
+    fn get_current_environment(&self) -> JSResult<&Environment> {
+        self.get_environment(self.current_environment_handle)
     }
 
-    fn get_current_environment_mut(&mut self) -> Option<&mut Environment> {
-        self.environment_heap
-            .get_mut(self.current_environment_handle)
+    fn get_environment(&self, id: HeapId) -> JSResult<&Environment> {
+        self.heap.get_environment(id)
+    }
+
+    fn get_environment_mut(&mut self, id: HeapId) -> JSResult<&mut Environment> {
+        self.heap.get_environment_mut(id)
+    }
+
+    fn get_current_environment_mut(&mut self) -> JSResult<&mut Environment> {
+        self.get_environment_mut(self.current_environment_handle)
+    }
+
+    fn add_value(&mut self, value: JSValue) -> usize {
+        self.heap.add_value(value)
+    }
+
+    fn get_value(&self, id: usize) -> JSResult<&JSValue> {
+        self.heap.get_value(id)
     }
 
     fn new_scope(&mut self) -> usize {
         let new_env = Environment::new(Some(self.current_environment_handle));
-        self.environment_heap.add_new_item(new_env)
+        self.heap.add_environment(new_env)
     }
 
     fn enter_scope(&mut self, scope_id: Option<usize>) -> usize {
@@ -182,8 +190,32 @@ impl Interpreter {
         let var_id = self
             .get_variable_from_current_environment(param_id)
             .unwrap();
-        let var = self.get_variable_from_heap(var_id)?;
+        let var = self.get_var(var_id)?;
         var.update_value(value.clone())?;
         Ok(JSValue::Undefined)
     }
+}
+
+pub fn debug_value(interpreter: &mut Interpreter, value: &JSValue) -> String {
+    let out = match value {
+        JSValue::Null => "null".to_string(),
+        JSValue::Undefined => "undefined".to_string(),
+        JSValue::Boolean { data } => data.to_string(),
+        JSValue::String { data } => {
+            let s = get_string_from_pool(data).unwrap_or("UNKNOWN STRING".to_string());
+            format!("'{s}'")
+        }
+        JSValue::Symbol {
+            id: _,
+            description: _,
+        } => todo!(),
+        JSValue::Number { data } => data.to_string(),
+        JSValue::BigInt => todo!(),
+        JSValue::Object { object_id } => {
+            let obj = interpreter.get_object(*object_id).unwrap().clone();
+            obj.debug(interpreter)
+        }
+    };
+
+    out
 }

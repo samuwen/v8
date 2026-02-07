@@ -3,6 +3,7 @@
 
 use std::fmt;
 
+use log::debug;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -38,6 +39,7 @@ pub enum Expr {
         string_index: SymbolU32,
     },
     ObjectCall {
+        identifier: Box<Expr>,
         expr: Box<Expr>,
     },
     FunctionCall {
@@ -89,9 +91,10 @@ impl Expr {
         }
     }
 
-    pub fn new_object_call(identifier: Expr) -> Self {
+    pub fn new_object_call(identifier: Expr, expr: Expr) -> Self {
         Self::ObjectCall {
-            expr: Box::new(identifier),
+            identifier: Box::new(identifier),
+            expr: Box::new(expr),
         }
     }
 
@@ -142,12 +145,7 @@ impl Expr {
                             JSValue::Number { data: _ } => "number",
                             JSValue::BigInt => "bigint",
                             JSValue::Object { object_id } => {
-                                let obj = interpreter.object_heap.get_mut(object_id).ok_or(
-                                    JSError::new(&format!(
-                                        "Object with id {} not found",
-                                        &object_id
-                                    )),
-                                )?;
+                                let obj = interpreter.get_object_mut(object_id)?;
                                 match obj.is_function() {
                                     true => "function",
                                     false => "object",
@@ -192,7 +190,7 @@ impl Expr {
                 let exists = interpreter.get_variable_from_current_environment(*ident_index);
                 match exists {
                     Some(id) => {
-                        let var = interpreter.get_variable_from_heap(id)?;
+                        let var = interpreter.get_var(id)?;
                         if var.is_mutable() {
                             var.update_value(rhs.clone())?;
                             return Ok(rhs);
@@ -213,10 +211,7 @@ impl Expr {
                 match exists {
                     Some(id) => {
                         // already exists, so we evaluate the value
-                        let var = interpreter
-                            .variable_heap
-                            .get_item_from_id(id)
-                            .ok_or(JSError::new_not_found("Identifier", id))?;
+                        let var = interpreter.get_var(id)?;
                         Ok(var.get_value())
                     }
                     // doesn't exist yet, this is a declaration / initialization. pass the interned index to the statement
@@ -241,7 +236,19 @@ impl Expr {
                 let result = object.call(args, interpreter)?;
                 Ok(result)
             }
-            Expr::ObjectCall { expr } => todo!(),
+            Expr::ObjectCall { identifier, expr } => {
+                let object = identifier.evaluate(interpreter)?;
+                let expr = expr.evaluate(interpreter)?;
+                let key = expr.to_string(interpreter)?;
+                if let JSValue::Object { object_id } = object {
+                    let obj = interpreter.get_object(object_id).unwrap();
+                    let property = obj.get_property(&key).unwrap();
+                    let value = property.get_value()?.clone();
+                    return Ok(value);
+                }
+
+                Err(JSError::new("Object called with invalid property"))
+            }
         }
     }
 }
@@ -274,8 +281,8 @@ impl fmt::Display for Expr {
             Expr::Identifier { string_index } => {
                 write!(f, "Identifier({:?})", string_index)
             }
-            Expr::ObjectCall { expr } => {
-                write!(f, "ObjectCall({})", expr)
+            Expr::ObjectCall { identifier, expr } => {
+                write!(f, "ObjectCall {} ({})", identifier, expr)
             }
             Expr::FunctionCall {
                 identifier,

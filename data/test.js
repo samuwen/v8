@@ -1,7 +1,7 @@
-let x = 0;
-
-function hotdog(a1, a2) {
-    x = a1 + a2;
+function objectFactory() {
+    return { foo: "bar", baz: { quz: "hotdog" } };
 }
 
-hotdog(5, 6);
+const obj = objectFactory();
+const y = obj["baz"].quz;
+y;

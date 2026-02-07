@@ -3,53 +3,175 @@
 
 use std::collections::HashMap;
 
-pub struct Heap<V> {
-    map: HashMap<usize, V>,
-    counter: usize,
+use crate::{
+    environment::Environment,
+    errors::JSError,
+    values::{JSObject, JSResult, JSValue},
+    variable::Variable,
+};
+
+pub type HeapId = usize;
+
+#[derive(Debug)]
+enum HeapValue {
+    Environment(Environment),
+    Variable(Variable),
+    Value(JSValue),
+    Object(JSObject),
 }
 
-impl<V> Heap<V> {
+impl HeapValue {
+    pub fn new_environment(env: Environment) -> Self {
+        Self::Environment(env)
+    }
+
+    pub fn new_variable(var: Variable) -> Self {
+        Self::Variable(var)
+    }
+
+    pub fn new_value(val: JSValue) -> Self {
+        Self::Value(val)
+    }
+
+    pub fn new_object(obj: JSObject) -> Self {
+        Self::Object(obj)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Heap {
+    map: HashMap<HeapId, HeapValue>,
+    counter: HeapId,
+}
+
+impl Heap {
     pub fn new() -> Self {
-        let map = HashMap::new();
-        let counter = 0;
-        Self { map, counter }
+        Self::default()
     }
 
-    pub fn add_new_item(&mut self, item: V) -> usize {
-        let item_id = self.increment();
-        self.map.insert(item_id, item);
-        item_id
+    pub fn add_environment(&mut self, env: Environment) -> HeapId {
+        let value = HeapValue::new_environment(env);
+        self.add_to_map(value)
     }
 
-    pub fn add_new_item_with_id(&mut self, item: V, id: usize) -> usize {
-        self.map.insert(id, item);
-        id
+    pub fn add_variable(&mut self, var: Variable) -> HeapId {
+        let value = HeapValue::new_variable(var);
+        self.add_to_map(value)
     }
 
-    pub fn get_mut(&mut self, id: usize) -> Option<&mut V> {
-        self.map.get_mut(&id)
+    pub fn add_value(&mut self, val: JSValue) -> HeapId {
+        let value = HeapValue::new_value(val);
+        self.add_to_map(value)
     }
 
-    pub fn get_item_from_id(&self, id: usize) -> Option<&V> {
+    pub fn add_object(&mut self, obj: JSObject) -> HeapId {
+        let value = HeapValue::new_object(obj);
+        self.add_to_map(value)
+    }
+
+    pub fn get_environment(&self, id: HeapId) -> JSResult<&Environment> {
+        let heap_val_opt = self.get(id);
+        match heap_val_opt {
+            Some(hv) => match hv {
+                HeapValue::Environment(env) => Ok(env),
+                _ => Err(JSError::new_not_found("Environment", id)),
+            },
+            _ => Err(JSError::new_not_found("Environment", id)),
+        }
+    }
+
+    pub fn get_environment_mut(&mut self, id: HeapId) -> JSResult<&mut Environment> {
+        let heap_val_opt = self.get_mut(id);
+        match heap_val_opt {
+            Some(hv) => match hv {
+                HeapValue::Environment(env) => Ok(env),
+                _ => Err(JSError::new_not_found("Environment", id)),
+            },
+            _ => Err(JSError::new_not_found("Environment", id)),
+        }
+    }
+
+    pub fn get_value(&self, id: HeapId) -> JSResult<&JSValue> {
+        let heap_val_opt = self.get(id);
+        match heap_val_opt {
+            Some(hv) => match hv {
+                HeapValue::Value(val) => Ok(val),
+                _ => Err(JSError::new_not_found("Value", id)),
+            },
+            _ => Err(JSError::new_not_found("Value", id)),
+        }
+    }
+
+    pub fn get_value_mut(&mut self, id: HeapId) -> JSResult<&mut JSValue> {
+        let heap_val_opt = self.get_mut(id);
+        match heap_val_opt {
+            Some(hv) => match hv {
+                HeapValue::Value(val) => Ok(val),
+                _ => Err(JSError::new_not_found("Value", id)),
+            },
+            _ => Err(JSError::new_not_found("Value", id)),
+        }
+    }
+
+    pub fn get_variable(&self, id: HeapId) -> JSResult<&Variable> {
+        let heap_val_opt = self.get(id);
+        match heap_val_opt {
+            Some(hv) => match hv {
+                HeapValue::Variable(var) => Ok(var),
+                _ => Err(JSError::new_not_found("Variable", id)),
+            },
+            _ => Err(JSError::new_not_found("Variable", id)),
+        }
+    }
+
+    pub fn get_variable_mut(&mut self, id: HeapId) -> JSResult<&mut Variable> {
+        let heap_val_opt = self.get_mut(id);
+        match heap_val_opt {
+            Some(hv) => match hv {
+                HeapValue::Variable(var) => Ok(var),
+                _ => Err(JSError::new_not_found("Variable", id)),
+            },
+            _ => Err(JSError::new_not_found("Variable", id)),
+        }
+    }
+
+    pub fn get_object(&self, id: HeapId) -> JSResult<&JSObject> {
+        let heap_val_opt = self.get(id);
+        match heap_val_opt {
+            Some(hv) => match hv {
+                HeapValue::Object(obj) => Ok(obj),
+                _ => Err(JSError::new_not_found("Object", id)),
+            },
+            _ => Err(JSError::new_not_found("Object", id)),
+        }
+    }
+
+    pub fn get_object_mut(&mut self, id: HeapId) -> JSResult<&mut JSObject> {
+        let heap_val_opt = self.get_mut(id);
+        match heap_val_opt {
+            Some(hv) => match hv {
+                HeapValue::Object(obj) => Ok(obj),
+                _ => Err(JSError::new_not_found("Object", id)),
+            },
+            _ => Err(JSError::new_not_found("Object", id)),
+        }
+    }
+
+    fn get(&self, id: HeapId) -> Option<&HeapValue> {
         self.map.get(&id)
     }
 
-    pub fn get_item_from_option(&mut self, opt: &Option<usize>) -> Option<&mut V> {
-        if let Some(proto_id) = opt {
-            return self.get_mut(*proto_id);
-        }
-        None
+    fn get_mut(&mut self, id: HeapId) -> Option<&mut HeapValue> {
+        self.map.get_mut(&id)
     }
 
-    pub fn get_next_id(&mut self) -> usize {
-        self.increment()
+    fn add_to_map(&mut self, value: HeapValue) -> HeapId {
+        let id = self.get_next_id();
+        self.map.insert(id, value);
+        id
     }
 
-    pub fn has_item(&self, id: usize) -> bool {
-        self.map.contains_key(&id)
-    }
-
-    fn increment(&mut self) -> usize {
+    fn get_next_id(&mut self) -> HeapId {
         let id = self.counter;
         self.counter += 1;
         id
