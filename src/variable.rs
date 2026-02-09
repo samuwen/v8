@@ -43,11 +43,21 @@ impl Variable {
         Err(JSError::new_const_type_error())
     }
 
-    pub fn get_value(&self) -> JSValue {
+    pub fn get_value(&self) -> &JSValue {
+        &self.value
+    }
+
+    pub fn get_value_cloned(&self) -> JSValue {
         self.value.clone()
     }
 
     pub fn is_mutable(&self) -> bool {
         self.is_mutable
+    }
+}
+
+impl std::fmt::Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Variable: {:?}", self.value)
     }
 }

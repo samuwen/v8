@@ -38,6 +38,17 @@ impl HeapValue {
     }
 }
 
+impl std::fmt::Display for HeapValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HeapValue::Environment(environment) => write!(f, "{environment}"),
+            HeapValue::Variable(variable) => write!(f, "{variable}"),
+            HeapValue::Value(jsvalue) => write!(f, "{jsvalue:?}"),
+            HeapValue::Object(jsobject) => write!(f, "{jsobject:?}"),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Heap {
     map: HashMap<HeapId, HeapValue>,
@@ -175,5 +186,15 @@ impl Heap {
         let id = self.counter;
         self.counter += 1;
         id
+    }
+}
+
+impl std::fmt::Display for Heap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Heap: {{")?;
+        for (id, value) in &self.map {
+            writeln!(f, "{id}: {value}")?;
+        }
+        writeln!(f, "}}")
     }
 }

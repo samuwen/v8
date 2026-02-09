@@ -1,9 +1,11 @@
-use log::{debug, error, warn};
+use log::{debug, error, trace, warn};
 use string_interner::symbol::SymbolU32;
 
 use crate::{
+    constants::GLOBAL_THIS_NAME,
     environment::Environment,
-    global::get_string_from_pool,
+    errors::JSError,
+    global::{get_or_intern_string, get_string_from_pool},
     heap::{Heap, HeapId},
     lexer::Lexer,
     parser::Parser,
@@ -13,6 +15,7 @@ use crate::{
     variable::Variable,
 };
 
+mod constants;
 mod environment;
 mod errors;
 mod expr;
@@ -46,7 +49,8 @@ impl Interpreter {
     }
 
     pub fn setup(mut self) -> Self {
-        JSObject::create_global_this(&mut self);
+        JSObject::create_global_object(&mut self);
+        trace!("{}", self.heap);
         self
     }
 
@@ -126,6 +130,45 @@ impl Interpreter {
         current_environment.add_variable(str_id, var_id);
     }
 
+    fn get_value_from_environment(
+        &mut self,
+        env_id_opt: Option<usize>,
+        str_id: SymbolU32,
+    ) -> JSResult<&JSValue> {
+        let env_id = env_id_opt.unwrap_or(self.current_environment_handle);
+        let environment = self.get_environment(env_id)?;
+        let var_result = environment.get_variable(str_id, self);
+        match var_result {
+            Some(var_id) => {
+                let var = self.get_var(var_id)?;
+                let val = var.get_value();
+                return Ok(val);
+            }
+            None => {
+                let parent_handle_opt = environment.get_parent_handle();
+                match parent_handle_opt {
+                    Some(handle) => {
+                        return self.get_value_from_environment(Some(handle), str_id);
+                    }
+                    None => {
+                        let global_this_id = get_or_intern_string(GLOBAL_THIS_NAME);
+                        let global_this_val =
+                            self.get_value_from_environment(None, global_this_id)?;
+                        let object_id = global_this_val.get_object_id()?;
+                        let global_this = self.get_object(object_id)?;
+                        let prop = global_this.get_property(&str_id);
+                        if let Some(prop) = prop {
+                            let val = prop.get_value()?;
+                            return Ok(val);
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(JSError::new("Variable not found in environment"))
+    }
+
     fn get_variable_from_current_environment(&self, string_id: SymbolU32) -> Option<usize> {
         let current_environment = self
             .get_current_environment()
@@ -175,7 +218,6 @@ impl Interpreter {
         let current_env = self
             .get_current_environment_mut()
             .expect("Somehow you deleted all environments");
-        current_env.expire();
         let parent = current_env.get_parent_handle();
         if parent.is_none() {
             // we're in root, likely a global scoped fn was called

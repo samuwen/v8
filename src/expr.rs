@@ -1,6 +1,5 @@
 use std::fmt;
 
-use log::debug;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -26,7 +25,7 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Binary {
-        operator: Token,
+        operator: Kind,
         left: Box<Expr>,
         right: Box<Expr>,
     },
@@ -90,7 +89,7 @@ impl Expr {
         }
     }
 
-    pub fn new_binary(operator: Token, left: Expr, right: Expr) -> Self {
+    pub fn new_binary(operator: Kind, left: Expr, right: Expr) -> Self {
         Self::Binary {
             operator,
             left: Box::new(left),
@@ -205,10 +204,7 @@ impl Expr {
                         interpreter,
                     );
                 }
-                panic!(
-                    "{}",
-                    format!("Unhandled operator: {:?}", operator.get_kind())
-                );
+                panic!("{}", format!("Unhandled operator: {:?}", operator));
             }
             Expr::Assignment { identifier, right } => {
                 let ident_index = if let Expr::Identifier { string_index } = &**identifier {
@@ -237,15 +233,15 @@ impl Expr {
             }
             Expr::Grouping { expr } => Ok(expr.evaluate(interpreter)?),
             Expr::Identifier { string_index } => {
-                let exists = interpreter.get_variable_from_current_environment(*string_index);
+                let exists = interpreter.get_value_from_environment(None, *string_index);
+                // let exists = interpreter.get_variable_from_environment(None, *string_index);
                 match exists {
-                    Some(id) => {
+                    Ok(value) => {
                         // already exists, so we evaluate the value
-                        let var = interpreter.get_var(id)?;
-                        Ok(var.get_value())
+                        Ok(value.clone())
                     }
                     // doesn't exist yet, this is a declaration / initialization. pass the interned index to the statement
-                    None => Ok(JSValue::new_string(string_index)),
+                    Err(_) => Ok(JSValue::new_string(string_index)),
                 }
             }
             Expr::FunctionCall {
@@ -312,8 +308,7 @@ impl Expr {
                 let variable = interpreter.get_variable_from_current_environment(data);
                 if let Some(var_id) = variable {
                     let var = interpreter.get_var(var_id)?;
-                    debug!("{var:?}");
-                    let value = var.get_value();
+                    let value = var.get_value_cloned();
                     let s = value.to_string(interpreter)?;
                     let s = get_string_from_pool(&s);
                     if let Some(out) = s {

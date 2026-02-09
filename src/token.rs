@@ -98,6 +98,26 @@ pub enum Kind {
     Eof,
 }
 
+impl Kind {
+    pub fn is_binary_operator(&self) -> bool {
+        match self {
+            Kind::Plus
+            | Kind::Minus
+            | Kind::Slash
+            | Kind::Star
+            | Kind::LessThan
+            | Kind::LessThanOrEquals
+            | Kind::GreaterThan
+            | Kind::GreaterThanOrEquals
+            | Kind::EqualEqual
+            | Kind::EqualEqualEqual
+            | Kind::NotEqual
+            | Kind::Percent => true,
+            _ => false,
+        }
+    }
+}
+
 static KEYWORDS: OnceLock<Mutex<HashMap<&'static str, Kind>>> = OnceLock::new();
 
 fn get_keywords() -> &'static Mutex<HashMap<&'static str, Kind>> {
@@ -211,23 +231,6 @@ impl Token {
 
     pub fn get_span(&self) -> Span {
         self.span.clone()
-    }
-
-    pub fn is_binary_operator(&self) -> bool {
-        match self.get_kind() {
-            Kind::Plus
-            | Kind::Minus
-            | Kind::Slash
-            | Kind::Star
-            | Kind::LessThan
-            | Kind::LessThanOrEquals
-            | Kind::GreaterThan
-            | Kind::GreaterThanOrEquals
-            | Kind::EqualEqual
-            | Kind::EqualEqualEqual
-            | Kind::Percent => true,
-            _ => false,
-        }
     }
 
     pub fn is_unary_operator(&self) -> bool {

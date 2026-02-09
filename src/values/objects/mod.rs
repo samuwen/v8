@@ -5,20 +5,26 @@ mod array;
 mod function;
 mod ordinary;
 
+use core::f64;
+
 use function::*;
 use ordinary::*;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
     Interpreter,
-    expr::Expr,
+    constants::{
+        CONSOLE_NAME, ERROR_NAME, GLOBAL_THIS_NAME, INFINITY_NAME, IS_FINITE_NAME, LOG_NAME,
+        NAN_NAME, UNDEFINED_NAME,
+    },
     global::get_or_intern_string,
     stmt::Stmt,
     values::{JSResult, JSValue, PreferredType, objects::array::Array},
 };
 
 pub type ObjectId = usize;
-pub type Properties = Vec<(SymbolU32, JSValue)>;
+pub type Property = (SymbolU32, JSValue);
+pub type Properties = Vec<Property>;
 pub const TO_PRIMITIVE_SYM: &'static str = "@@toPrimitive";
 pub const CALL: &'static str = "call";
 
@@ -52,31 +58,43 @@ impl JSObject {
         interpreter.add_object(object)
     }
 
-    /// Setup the initial global object. Initially just for console
-    pub fn create_global_this(interpreter: &mut Interpreter) {
-        let print_expr = Expr::new_print_expr(crate::expr::LogKind::Log);
-        let call_stmt = Stmt::new_expression(print_expr);
-        let scope_id = interpreter.enter_scope(None);
-        let data_id = get_or_intern_string("data");
-        let parameters = vec![data_id];
-        for param in &parameters {
-            interpreter.new_variable(*param, true, JSValue::Undefined);
-        }
-        interpreter.leave_scope();
-        let log_fn_id =
-            JSObject::new_function_object(Box::new(call_stmt), parameters, scope_id, interpreter);
-        let log_value = JSValue::Object {
-            object_id: log_fn_id,
-        };
-        let console_id = get_or_intern_string("console");
-        let log_id = get_or_intern_string("log");
-        let console_object = JSObject::new_ordinary_object(vec![(log_id, log_value)], interpreter);
-        let console_value = JSValue::Object {
-            object_id: console_object,
-        };
-        interpreter.new_variable(console_id, false, console_value);
+    pub fn create_global_object(interpreter: &mut Interpreter) {
+        let mut global_object = OrdinaryObject::new(vec![], interpreter);
 
-        // let _global_this = JSObject::new_ordinary_object(vec![(console_id, console_value)], interpreter);
+        let inf_str_id = get_or_intern_string(INFINITY_NAME);
+        let infinity = JSValue::new_number(&f64::INFINITY);
+        global_object.add_property_from_value(inf_str_id, infinity);
+
+        let nan_str_id = get_or_intern_string(NAN_NAME);
+        let nan = JSValue::new_number(&f64::NAN);
+        global_object.add_property_from_value(nan_str_id, nan);
+
+        let undef_str_id = get_or_intern_string(UNDEFINED_NAME);
+        let undefined = JSValue::new_undefined();
+        global_object.add_property_from_value(undef_str_id, undefined);
+
+        let (is_finite_id, is_finite) = JSObject::new_built_in_fn(
+            IS_FINITE_NAME,
+            FunctionObject::create_is_finite,
+            interpreter,
+        );
+        global_object.add_property(is_finite_id, ObjectPropertyBuilder::new(is_finite).build());
+
+        let (console_id, console_obj) = JSObject::new_built_in_obj(
+            CONSOLE_NAME,
+            vec![
+                JSObject::new_built_in_fn(LOG_NAME, FunctionObject::create_log, interpreter),
+                JSObject::new_built_in_fn(ERROR_NAME, FunctionObject::create_error, interpreter),
+            ],
+            interpreter,
+        );
+        global_object.add_property(console_id, ObjectPropertyBuilder::new(console_obj).build());
+
+        let global_object = JSObject::Ordinary(global_object);
+        let obj_id = interpreter.add_object(global_object);
+        let value = JSValue::Object { object_id: obj_id };
+        let global_this_id = get_or_intern_string(GLOBAL_THIS_NAME);
+        interpreter.new_variable(global_this_id, false, value);
     }
 
     pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
@@ -138,6 +156,71 @@ impl JSObject {
             JSObject::Array(array) => todo!(),
         }
     }
+
+    fn new_built_in_fn<F>(name: &str, f: F, interpreter: &mut Interpreter) -> Property
+    where
+        F: Fn(&mut Interpreter) -> FunctionObject,
+    {
+        let str_id = get_or_intern_string(name);
+        let fn_object = f(interpreter);
+        let js_object = JSObject::Function(fn_object);
+        let object_id = interpreter.add_object(js_object);
+        let js_value = JSValue::Object { object_id };
+        (str_id, js_value)
+    }
+
+    fn new_built_in_obj(
+        name: &str,
+        properties: Properties,
+        interpreter: &mut Interpreter,
+    ) -> Property {
+        let str_id = get_or_intern_string(name);
+        let object_id = JSObject::new_ordinary_object(properties, interpreter);
+        let js_value = JSValue::Object { object_id };
+        (str_id, js_value)
+    }
+}
+
+struct ObjectPropertyBuilder {
+    value: JSValue,
+    writable: Option<bool>,
+    enumerable: Option<bool>,
+    configurable: Option<bool>,
+}
+
+impl ObjectPropertyBuilder {
+    fn new(value: JSValue) -> Self {
+        Self {
+            value,
+            writable: None,
+            enumerable: None,
+            configurable: None,
+        }
+    }
+
+    fn writable(mut self, w: bool) -> Self {
+        self.writable = Some(w);
+        self
+    }
+
+    fn enumerable(mut self, w: bool) -> Self {
+        self.enumerable = Some(w);
+        self
+    }
+
+    fn configurable(mut self, w: bool) -> Self {
+        self.configurable = Some(w);
+        self
+    }
+
+    fn build(self) -> ObjectProperty {
+        ObjectProperty::Data {
+            value: self.value,
+            writable: self.writable.unwrap_or_default(),
+            enumerable: self.enumerable.unwrap_or_default(),
+            configurable: self.configurable.unwrap_or_default(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -192,6 +275,16 @@ impl ObjectProperty {
                 configurable: _,
             } => return Ok(value),
             _ => unimplemented!(),
+        }
+    }
+}
+
+impl std::fmt::Display for JSObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JSObject::Ordinary(ordinary_object) => write!(f, "{ordinary_object}"),
+            JSObject::Function(function_object) => write!(f, "{function_object}"),
+            JSObject::Array(array) => todo!(),
         }
     }
 }

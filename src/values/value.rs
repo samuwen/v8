@@ -266,7 +266,7 @@ impl JSValue {
 
     pub fn apply_string_or_numeric_binary_operator(
         &self,
-        op: &Token,
+        op: &Kind,
         right: &JSValue,
         interpreter: &mut Interpreter,
     ) -> JSResult<JSValue> {
@@ -284,9 +284,9 @@ impl JSValue {
         // must be numbers at this point
         let l_num = left_prim.to_numeric(interpreter)?;
         let r_num = right_prim.to_numeric(interpreter)?;
-        debug!("Checking: {} {:?} {}", l_num, op.get_kind(), r_num);
+        debug!("Checking: {} {:?} {}", l_num, op, r_num);
         // assert these are the same type when doing bigints
-        let result = match op.get_kind() {
+        let result = match op {
             Kind::Plus => add(l_num, r_num),
             Kind::Minus => subtract(l_num, r_num),
             Kind::Star => multiply(l_num, r_num),
@@ -313,6 +313,10 @@ impl JSValue {
                 return Ok(JSValue::new_boolean(&value));
             }
             Kind::EqualEqualEqual => return Ok(JSValue::new_boolean(&equal(l_num, r_num))),
+            Kind::NotEqual => {
+                let result = equal(l_num, r_num);
+                return Ok(JSValue::new_boolean(&!result));
+            }
             _ => panic!("the disco"),
         };
         Ok(JSValue::new_number(&result))

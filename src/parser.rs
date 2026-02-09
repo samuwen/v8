@@ -220,11 +220,7 @@ impl<'a> Parser<'a> {
                     Kind::SlashEquals => Kind::Slash,
                     _ => panic!("add the kind to the if list, dork"),
                 };
-                let right = Expr::new_binary(
-                    Token::new_from_span(op, &op_token.get_span()),
-                    left.clone(),
-                    right,
-                );
+                let right = Expr::new_binary(op, left.clone(), right);
                 left = Expr::new_assignment(left, right);
             }
         }
@@ -238,7 +234,7 @@ impl<'a> Parser<'a> {
             Kind::EqualEqual,
             Kind::NotEqual,
         ]) {
-            let operator = self.current_token.clone();
+            let operator = self.current_token.get_kind().clone();
             self.next_token();
             let right = self.handle_comparisons()?;
             left = Expr::new_binary(operator, left, right);
@@ -254,7 +250,7 @@ impl<'a> Parser<'a> {
             Kind::LessThanOrEquals,
             Kind::GreaterThanOrEquals,
         ]) {
-            let operator = self.current_token.clone();
+            let operator = self.current_token.get_kind().clone();
             self.next_token();
             let right = self.handle_terms()?;
             left = Expr::new_binary(operator, left, right);
@@ -265,7 +261,7 @@ impl<'a> Parser<'a> {
     fn handle_terms(&mut self) -> JSResult<Expr> {
         let mut left = self.handle_factors()?;
         while self.current_token.is_kinds(vec![Kind::Plus, Kind::Minus]) {
-            let operator = self.current_token.clone();
+            let operator = self.current_token.get_kind().clone();
             self.next_token();
             let right = self.handle_factors()?;
             left = Expr::new_binary(operator, left, right);
@@ -279,7 +275,7 @@ impl<'a> Parser<'a> {
             .current_token
             .is_kinds(vec![Kind::Star, Kind::Slash, Kind::Percent])
         {
-            let operator = self.current_token.clone();
+            let operator = self.current_token.get_kind().clone();
             self.next_token();
             let right = self.handle_unaries()?;
             left = Expr::new_binary(operator, left, right);

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use log::trace;
 use string_interner::symbol::SymbolU32;
 
-use crate::Interpreter;
+use crate::{Interpreter, global::get_string_from_pool};
 
 type EnvironmentId = usize;
 type StringId = SymbolU32;
@@ -65,5 +65,23 @@ impl Environment {
 
     pub fn expire(&mut self) {
         self.is_expired = true;
+    }
+}
+
+impl std::fmt::Display for Environment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Environment: {{")?;
+        let parent_id = match self.parent_id {
+            Some(id) => id.to_string(),
+            None => "None".to_string(),
+        };
+        writeln!(f, "\tParentID: {parent_id}")?;
+        writeln!(f, "\tHandles: [")?;
+        for (str_id, var_id) in self.handles.iter() {
+            let string = get_string_from_pool(str_id).unwrap();
+            writeln!(f, "\t\t{string}: {var_id}")?;
+        }
+        writeln!(f, "\t]")?;
+        writeln!(f, "}}")
     }
 }

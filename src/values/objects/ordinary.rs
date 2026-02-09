@@ -33,6 +33,19 @@ impl OrdinaryObject {
         }
     }
 
+    pub fn new_from_full_props(
+        properties: Vec<(SymbolU32, ObjectProperty)>,
+        extensible: bool,
+        proto: Option<usize>,
+        interpreter: &mut Interpreter,
+    ) -> Self {
+        Self {
+            extensible,
+            prototype: proto,
+            properties: HashMap::from_iter(properties),
+        }
+    }
+
     pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
         let prim_sym = get_or_intern_string(TO_PRIMITIVE_SYM);
         let maybe_property = self.properties.get(&prim_sym);
@@ -76,6 +89,15 @@ impl OrdinaryObject {
         self.properties.get(key)
     }
 
+    pub fn add_property(&mut self, key: SymbolU32, value: ObjectProperty) {
+        self.properties.insert(key, value);
+    }
+
+    pub fn add_property_from_value(&mut self, key: SymbolU32, value: JSValue) {
+        self.properties
+            .insert(key, ObjectProperty::new_from_value(value));
+    }
+
     pub fn call(&self, name: &SymbolU32) -> JSResult<JSValue> {
         let s = get_string_from_pool(name).unwrap_or("anonymous".to_string());
         let error = JSError::new(&format!("Uncaught TypeError: {s} is not a function"));
@@ -96,5 +118,16 @@ impl OrdinaryObject {
         out.push_str(&prop_string);
         out.push_str(" }");
         out
+    }
+}
+
+impl std::fmt::Display for OrdinaryObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Object: {{")?;
+        for (key, value) in &self.properties {
+            let string = get_string_from_pool(&key).unwrap();
+            writeln!(f, "\t {string}: {:?}", value.get_value())?;
+        }
+        writeln!(f, "}}")
     }
 }
