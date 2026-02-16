@@ -1,5 +1,6 @@
 mod number;
 mod objects;
+mod string;
 mod value;
 
 pub use number::*;
@@ -15,3 +16,10 @@ pub enum PreferredType {
 }
 
 pub type JSResult<T> = Result<T, JSError>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ObjectKind {
+    Object,
+    Function,
+    Array,
+}

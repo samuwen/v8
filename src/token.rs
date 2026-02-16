@@ -88,6 +88,7 @@ pub enum Kind {
     Semicolon,
     Comma,
     NotEqual,
+    NotEqualEqual,
     Bang,
     LessThan,
     LessThanOrEquals,
@@ -109,10 +110,14 @@ impl Kind {
             | Kind::LessThanOrEquals
             | Kind::GreaterThan
             | Kind::GreaterThanOrEquals
-            | Kind::EqualEqual
-            | Kind::EqualEqualEqual
-            | Kind::NotEqual
             | Kind::Percent => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_equality_operator(&self) -> bool {
+        match self {
+            Kind::EqualEqual | Kind::EqualEqualEqual | Kind::NotEqual | Kind::NotEqualEqual => true,
             _ => false,
         }
     }

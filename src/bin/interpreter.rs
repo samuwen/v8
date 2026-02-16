@@ -45,7 +45,13 @@ fn main() -> Result<()> {
             std::process::exit(1);
         }
         // we have a valid js file that's been read into a string
-        let _res = interpreter.interpret(&source);
+        let (out, err) = interpreter.interpret(&source).unwrap();
+        if out.len() > 0 {
+            println!("{out}");
+        }
+        if err.len() > 0 {
+            eprintln!("{err}");
+        }
         std::process::exit(0);
     }
     println!("Welcome to v8 0.0.1");
@@ -66,9 +72,12 @@ fn main() -> Result<()> {
                     } else {
                         line
                     };
-                    let res = interpreter.interpret(&line);
-                    if let Err(s) = res {
-                        println!("ERROR ASSHOLE {}", s);
+                    let (out, err) = interpreter.interpret(&line).unwrap();
+                    if out.len() > 0 {
+                        println!("{out}");
+                    }
+                    if err.len() > 0 {
+                        eprintln!("{err}");
                     }
                 }
                 Err(ReadlineError::Interrupted) => {

@@ -1,3 +1,4 @@
+use core::f64;
 use std::{
     mem::discriminant,
     sync::{Mutex, OnceLock},
@@ -12,10 +13,10 @@ use crate::{
     expr::Expr,
     global::{get_or_intern_string, get_string_from_pool},
     stmt::Stmt,
-    token::{Kind, Token},
+    token::Kind,
     utils::get_function_params,
     values::{
-        JSResult, PreferredType, add, divide, equal, less_than, multiply,
+        JSResult, ObjectKind, PreferredType, add, divide, equal, less_than, multiply,
         objects::{JSObject, ObjectId, Properties},
         remainder, subtract,
     },
@@ -43,7 +44,7 @@ pub enum JSValue {
     Symbol { id: usize, description: SymbolU32 },
     Number { data: f64 },
     BigInt,
-    Object { object_id: usize },
+    Object { object_id: usize, kind: ObjectKind },
 }
 
 impl JSValue {
@@ -51,12 +52,14 @@ impl JSValue {
         &self,
         preferred_type: Option<PreferredType>,
         interpreter: &mut Interpreter,
-    ) -> JSResult<&JSValue> {
+    ) -> JSResult<JSValue> {
         match self {
-            JSValue::Object { object_id } => {
-                todo!()
+            JSValue::Object { object_id, kind: _ } => {
+                let obj = interpreter.get_object(*object_id)?;
+                let res = obj.to_primitive(preferred_type.unwrap_or(PreferredType::Number))?;
+                Ok(res)
             }
-            _ => Ok(self),
+            _ => Ok(self.clone()),
         }
     }
 
@@ -76,7 +79,7 @@ impl JSValue {
         }
     }
 
-    pub fn to_numeric(&self, interpreter: &mut Interpreter) -> JSResult<f64> {
+    pub fn to_numeric(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         let prim_value = self.to_primitive(Some(PreferredType::Number), interpreter)?;
         match prim_value {
             JSValue::BigInt => todo!(),
@@ -84,24 +87,30 @@ impl JSValue {
         }
     }
 
-    pub fn to_number(&self, interpreter: &mut Interpreter) -> JSResult<f64> {
+    pub fn to_number(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         let res = match self {
-            JSValue::Null => 0.0,
-            JSValue::Undefined => f64::NAN,
-            JSValue::Boolean { data } => match data {
-                true => 1.0,
-                false => 0.0,
-            },
-            JSValue::String { data } => JSValue::string_to_number(data)?,
+            JSValue::Null => JSValue::new_number(&0.0),
+            JSValue::Undefined => JSValue::new_number(&f64::NAN),
+            JSValue::Boolean { data } => JSValue::new_number(match data {
+                true => &1.0,
+                false => &0.0,
+            }),
+            JSValue::String { data } => JSValue::new_number(&JSValue::string_to_number(data)),
             JSValue::Symbol {
                 id: _,
                 description: _,
+            } => {
+                return Err(JSError::new_function_type_error(
+                    "Cannot convert a Symbol value to a number",
+                ));
             }
-            | JSValue::BigInt => {
-                return Err(JSError::new_function_type_error("unknown"));
+            JSValue::BigInt => {
+                return Err(JSError::new_function_type_error(
+                    "Cannot convert a BigInt value to a number",
+                ));
             }
-            JSValue::Number { data } => *data,
-            JSValue::Object { object_id } => {
+            JSValue::Number { data: _ } => self.clone(),
+            JSValue::Object { object_id, kind: _ } => {
                 let object = interpreter.get_object_mut(*object_id)?;
                 let prim_value = object.to_primitive(PreferredType::Number)?;
                 prim_value.to_number(interpreter)?
@@ -110,12 +119,128 @@ impl JSValue {
         Ok(res)
     }
 
-    pub fn string_to_number(value: &SymbolU32) -> JSResult<f64> {
-        todo!();
+    pub fn string_to_number(value: &SymbolU32) -> f64 {
+        let string = get_string_from_pool(value).expect("Prevented by spec");
+        let number = string.parse::<f64>();
+        match number {
+            Ok(n) => n,
+            Err(_) => f64::NAN,
+        }
     }
 
-    // might wanna move these elsewhere
-    pub fn string_to_code_points(value: &SymbolU32) -> JSResult<Vec<u32>> {
+    pub fn to_integer_or_infinity(&self, interpreter: &mut Interpreter) -> JSResult<Self> {
+        let number = self.to_number(interpreter)?.get_number();
+        if number.is_nan() || number == 0.0 {
+            return Ok(JSValue::new_number(&0.0));
+        }
+        if number.is_infinite() {
+            return Ok(JSValue::new_number(&number));
+        }
+        let floored = f64::floor(number);
+        Ok(JSValue::new_number(&floored))
+    }
+
+    pub fn to_int_32(&self, interpreter: &mut Interpreter) -> JSResult<i32> {
+        let number = self.to_number(interpreter)?.get_number();
+        if number.is_infinite() || number == 0.0 || number == -0.0 {
+            return Ok(0);
+        }
+        let int = number.trunc() as i32;
+        let rhs_mod = 2i32.pow(32);
+        let int32bit = int % rhs_mod;
+        if int32bit >= 2i32.pow(31) {
+            return Ok(int32bit - rhs_mod);
+        }
+
+        Ok(int32bit)
+    }
+
+    pub fn to_uint_32(&self, interpreter: &mut Interpreter) -> JSResult<u32> {
+        let number = self.to_number(interpreter)?.get_number();
+        if number.is_infinite() || number == 0.0 || number == -0.0 {
+            return Ok(0);
+        }
+        let int = number.trunc() as u32;
+        let rhs_mod = 2u32.pow(32);
+        let int32bit = int % rhs_mod;
+        Ok(int32bit)
+    }
+
+    pub fn to_int_16(&self, interpreter: &mut Interpreter) -> JSResult<i16> {
+        let number = self.to_number(interpreter)?.get_number();
+
+        if number.is_infinite() || number == 0.0 || number == -0.0 {
+            return Ok(0);
+        }
+        let int = number.trunc() as i16;
+        let rhs_mod = 2i16.pow(16);
+        let int16bit = int % rhs_mod;
+        if int16bit >= 2i16.pow(15) {
+            return Ok(int16bit - rhs_mod);
+        }
+
+        Ok(int16bit)
+    }
+
+    pub fn to_uint_16(&self, interpreter: &mut Interpreter) -> JSResult<u16> {
+        let number = self.to_number(interpreter)?.get_number();
+        if number.is_infinite() || number == 0.0 || number == -0.0 {
+            return Ok(0);
+        }
+        let int = number.trunc() as u16;
+        let rhs_mod = 2u16.pow(16);
+        let int16bit = int % rhs_mod;
+        Ok(int16bit)
+    }
+
+    pub fn to_int_8(&self, interpreter: &mut Interpreter) -> JSResult<i8> {
+        let number = self.to_number(interpreter)?.get_number();
+
+        if number.is_infinite() || number == 0.0 || number == -0.0 {
+            return Ok(0);
+        }
+        let int = number.trunc() as i8;
+        let rhs_mod = 2i8.pow(8);
+        let int8bit = int % rhs_mod;
+        if int8bit >= 2i8.pow(7) {
+            return Ok(int8bit - rhs_mod);
+        }
+
+        Ok(int8bit)
+    }
+
+    pub fn to_uint_8(&self, interpreter: &mut Interpreter) -> JSResult<u8> {
+        let number = self.to_number(interpreter)?.get_number();
+        if number.is_infinite() || number == 0.0 || number == -0.0 {
+            return Ok(0);
+        }
+        let int = number.trunc() as u8;
+        let rhs_mod = 2u8.pow(8);
+        let int8bit = int % rhs_mod;
+        Ok(int8bit)
+    }
+
+    pub fn to_uint_8_clamped(&self, interpreter: &mut Interpreter) -> JSResult<u8> {
+        let number = self.to_number(interpreter)?.get_number();
+        if number.is_nan() {
+            return Ok(0);
+        }
+        let clamped = number.clamp(0.0, 255.0);
+        let floor = number.floor();
+        if clamped < floor + 0.5 {
+            return Ok(floor as u8);
+        }
+        if clamped > floor + 0.5 {
+            return Ok(floor as u8 + 1);
+        }
+        let floor = floor as u8;
+        if floor % 2 == 0 {
+            return Ok(floor);
+        }
+        Ok(floor + 1)
+    }
+
+    pub fn to_big_int(&self) -> JSResult<JSValue> {
         todo!()
     }
 
@@ -128,7 +253,7 @@ impl JSValue {
             JSValue::Symbol { id: _, description } => *description,
             JSValue::Number { data } => get_or_intern_string(&data.to_string()),
             JSValue::BigInt => todo!(),
-            JSValue::Object { object_id } => {
+            JSValue::Object { object_id, kind: _ } => {
                 let object = interpreter.get_object(*object_id)?;
                 let prim_value = object.to_primitive(PreferredType::String)?;
                 prim_value.to_string(interpreter)?
@@ -136,12 +261,28 @@ impl JSValue {
         })
     }
 
+    pub fn to_length(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
+        let len = self.to_integer_or_infinity(interpreter)?;
+        if let JSValue::Number { data } = len {
+            if data <= 0.0 {
+                return Ok(JSValue::new_number(&0.0));
+            }
+            let res = f64::min(data, (2u64.pow(53) - 1) as f64);
+            return Ok(JSValue::new_number(&res));
+        }
+        Err(JSError::new("To integer or infinity returned not a number"))
+    }
+
     pub fn is_undefined(&self) -> bool {
         discriminant(self) == discriminant(&JSValue::Undefined)
     }
 
     pub fn is_object(&self) -> bool {
-        discriminant(self) == discriminant(&JSValue::Object { object_id: 0 })
+        discriminant(self)
+            == discriminant(&JSValue::Object {
+                object_id: 0,
+                kind: ObjectKind::Object,
+            })
     }
 
     pub fn is_string(&self) -> bool {
@@ -161,12 +302,28 @@ impl JSValue {
         }
     }
 
+    pub fn is_number(&self) -> bool {
+        discriminant(self) == discriminant(&JSValue::Number { data: f64::NAN })
+    }
+
+    pub fn is_null(&self) -> bool {
+        discriminant(self) == discriminant(&JSValue::Null)
+    }
+
+    pub fn is_boolean(&self) -> bool {
+        discriminant(self) == discriminant(&JSValue::Boolean { data: false })
+    }
+
+    pub fn is_big_int(&self) -> bool {
+        discriminant(self) == discriminant(&JSValue::BigInt)
+    }
+
     pub fn new_number(v: &f64) -> Self {
         Self::Number { data: *v }
     }
 
-    pub fn new_boolean(v: &bool) -> Self {
-        Self::Boolean { data: *v }
+    pub fn new_boolean(v: bool) -> Self {
+        Self::Boolean { data: v }
     }
 
     pub fn new_undefined() -> Self {
@@ -178,23 +335,30 @@ impl JSValue {
     }
 
     pub fn new_object(properties: Properties, interpreter: &mut Interpreter) -> Self {
-        let object_id = JSObject::new_ordinary_object(properties, interpreter);
-        Self::Object { object_id }
+        // TODO - fix
+        let object_id = JSObject::new_ordinary_object(properties, true, None, interpreter);
+        Self::Object {
+            object_id,
+            kind: ObjectKind::Object,
+        }
     }
 
-    pub fn object_shallow_copy(id: ObjectId) -> Self {
-        Self::Object { object_id: id }
+    pub fn object_shallow_copy(id: ObjectId, kind: ObjectKind) -> Self {
+        Self::Object {
+            object_id: id,
+            kind,
+        }
     }
 
     pub fn get_object_id(&self) -> JSResult<usize> {
-        if let JSValue::Object { object_id } = self {
+        if let JSValue::Object { object_id, kind: _ } = self {
             return Ok(*object_id);
         }
         Err(JSError::new("Object not found"))
     }
 
     pub fn get_object<'a>(&'a self, interpreter: &'a Interpreter) -> JSResult<&'a JSObject> {
-        if let JSValue::Object { object_id } = self {
+        if let JSValue::Object { object_id, kind: _ } = self {
             return interpreter.get_object(*object_id);
         }
         Err(JSError::new("Expected object"))
@@ -206,7 +370,10 @@ impl JSValue {
 
     pub fn new_array(properties: Properties, interpreter: &mut Interpreter) -> Self {
         let object_id = JSObject::new_array_object(properties, interpreter);
-        Self::Object { object_id }
+        Self::Object {
+            object_id,
+            kind: ObjectKind::Array,
+        }
     }
 
     pub fn new_function(
@@ -232,36 +399,13 @@ impl JSValue {
         let parameters = get_function_params(&args, interpreter)?;
         let object_id =
             JSObject::new_function_object(Box::new(body), parameters, scope_id, interpreter);
-        let value = JSValue::Object { object_id };
+        let value = JSValue::Object {
+            object_id,
+            kind: ObjectKind::Function,
+        };
         interpreter.new_variable(ident_id, false, value);
 
         Ok(JSValue::Undefined)
-    }
-
-    pub fn to_int_32(&self, interpreter: &mut Interpreter) -> JSResult<i32> {
-        let number = self.to_number(interpreter)?;
-        if number.is_infinite() || number == 0.0 || number == -0.0 {
-            return Ok(0);
-        }
-        let int = number.trunc() as i32;
-        let rhs_mod = 2i32.pow(32);
-        let int32bit = int % rhs_mod;
-        if int32bit >= 2i32.pow(31) {
-            return Ok(int32bit - rhs_mod);
-        }
-
-        Ok(int32bit)
-    }
-
-    pub fn to_uint_32(&self, interpreter: &mut Interpreter) -> JSResult<u32> {
-        let number = self.to_number(interpreter)?;
-        if number.is_infinite() || number == 0.0 || number == -0.0 {
-            return Ok(0);
-        }
-        let int = number.trunc() as u32;
-        let rhs_mod = 2u32.pow(32);
-        let int32bit = int % rhs_mod;
-        Ok(int32bit)
     }
 
     pub fn apply_string_or_numeric_binary_operator(
@@ -282,8 +426,8 @@ impl JSValue {
             return Ok(JSValue::new_string(&id));
         }
         // must be numbers at this point
-        let l_num = left_prim.to_numeric(interpreter)?;
-        let r_num = right_prim.to_numeric(interpreter)?;
+        let l_num = left_prim.to_numeric(interpreter)?.get_number();
+        let r_num = right_prim.to_numeric(interpreter)?.get_number();
         debug!("Checking: {} {:?} {}", l_num, op, r_num);
         // assert these are the same type when doing bigints
         let result = match op {
@@ -294,32 +438,70 @@ impl JSValue {
             Kind::Percent => remainder(l_num, r_num),
             Kind::LessThan => {
                 let res = less_than(l_num, r_num);
-                return Ok(JSValue::new_boolean(&res));
+                return Ok(JSValue::new_boolean(res));
             }
             Kind::LessThanOrEquals => {
                 let lt = less_than(l_num, r_num);
                 let eq = equal(l_num, r_num);
                 let value = lt || eq;
-                return Ok(JSValue::new_boolean(&value));
+                return Ok(JSValue::new_boolean(value));
             }
             Kind::GreaterThan => {
                 let res = less_than(r_num, l_num);
-                return Ok(JSValue::new_boolean(&res));
+                return Ok(JSValue::new_boolean(res));
             }
             Kind::GreaterThanOrEquals => {
                 let gt = less_than(r_num, l_num);
                 let eq = equal(l_num, r_num);
                 let value = gt || eq;
-                return Ok(JSValue::new_boolean(&value));
+                return Ok(JSValue::new_boolean(value));
             }
-            Kind::EqualEqualEqual => return Ok(JSValue::new_boolean(&equal(l_num, r_num))),
+            Kind::EqualEqual => return Ok(JSValue::new_boolean(equal(l_num, r_num))),
+            Kind::EqualEqualEqual => return Ok(JSValue::new_boolean(equal(l_num, r_num))),
             Kind::NotEqual => {
                 let result = equal(l_num, r_num);
-                return Ok(JSValue::new_boolean(&!result));
+                return Ok(JSValue::new_boolean(!result));
             }
             _ => panic!("the disco"),
         };
         Ok(JSValue::new_number(&result))
+    }
+
+    pub fn compute_equality(
+        &self,
+        operator: &Kind,
+        rhs: &Self,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<JSValue> {
+        match operator {
+            Kind::EqualEqual => interpreter.is_loosely_equal(self, rhs),
+            Kind::EqualEqualEqual => interpreter.is_strictly_equal(self, rhs),
+            Kind::NotEqual => {
+                let res = interpreter.is_loosely_equal(self, rhs)?;
+                let boolean = res.get_boolean();
+                return Ok(JSValue::new_boolean(!boolean));
+            }
+            Kind::NotEqualEqual => {
+                let res = interpreter.is_strictly_equal(self, rhs)?;
+                let boolean = res.get_boolean();
+                return Ok(JSValue::new_boolean(!boolean));
+            }
+            _ => panic!("Unhandled equality operator: {:?}", operator),
+        }
+    }
+
+    pub fn get_number(&self) -> f64 {
+        if let JSValue::Number { data } = self {
+            return *data;
+        }
+        panic!("Expected number value from calling function")
+    }
+
+    pub fn get_boolean(&self) -> bool {
+        if let JSValue::Boolean { data } = self {
+            return *data;
+        }
+        panic!("Expected boolean value from calling function")
     }
 }
 

@@ -20,15 +20,15 @@ pub struct OrdinaryObject {
 }
 
 impl OrdinaryObject {
-    pub fn new(properties: Properties, interpreter: &mut Interpreter) -> Self {
+    pub fn new(properties: Properties, extensible: bool, proto: Option<usize>) -> Self {
         let map = HashMap::from_iter(
             properties
                 .into_iter()
                 .map(|(k, v)| (k, ObjectProperty::new_from_value(v))),
         );
         Self {
-            extensible: true,
-            prototype: None,
+            extensible,
+            prototype: proto,
             properties: map,
         }
     }

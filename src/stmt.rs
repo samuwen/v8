@@ -7,7 +7,7 @@ use crate::{
     errors::{ErrorKind, JSError},
     expr::Expr,
     utils::get_function_params,
-    values::{JSObject, JSResult, JSValue},
+    values::{JSObject, JSResult, JSValue, ObjectKind},
 };
 
 #[derive(Clone, Debug)]
@@ -167,7 +167,10 @@ impl Stmt {
                 let object_id =
                     JSObject::new_function_object(body.clone(), parameters, scope_id, interpreter);
 
-                let value = JSValue::Object { object_id };
+                let value = JSValue::Object {
+                    object_id,
+                    kind: ObjectKind::Function,
+                };
                 interpreter.new_variable(ident_id, false, value);
 
                 Ok(JSValue::Undefined)

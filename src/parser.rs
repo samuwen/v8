@@ -233,6 +233,7 @@ impl<'a> Parser<'a> {
             Kind::EqualEqualEqual,
             Kind::EqualEqual,
             Kind::NotEqual,
+            Kind::NotEqualEqual,
         ]) {
             let operator = self.current_token.get_kind().clone();
             self.next_token();
@@ -369,8 +370,8 @@ impl<'a> Parser<'a> {
                 let idx = get_or_intern_string(&source_value);
                 Ok(Expr::new_identifier(&idx))
             }
-            Kind::True => Ok(Expr::new_literal(JSValue::new_boolean(&true))),
-            Kind::False => Ok(Expr::new_literal(JSValue::new_boolean(&false))),
+            Kind::True => Ok(Expr::new_literal(JSValue::new_boolean(true))),
+            Kind::False => Ok(Expr::new_literal(JSValue::new_boolean(false))),
             Kind::Null => Ok(Expr::new_literal(JSValue::new_null())),
             Kind::Undefined => Ok(Expr::new_literal(JSValue::new_undefined())),
             Kind::LeftParen => {

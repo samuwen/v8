@@ -190,7 +190,13 @@ impl<'a> Lexer<'a> {
                     let is_not_equals = self.check_peeked_char('=');
                     if is_not_equals {
                         self.next_char();
-                        self.add_token_and_advance(Kind::NotEqual);
+                        let is_not_equal_equal = self.check_peeked_char('=');
+                        if is_not_equal_equal {
+                            self.next_char();
+                            self.add_token_and_advance(Kind::NotEqualEqual);
+                        } else {
+                            self.add_token_and_advance(Kind::NotEqual);
+                        }
                     } else {
                         self.add_token_and_advance(Kind::Bang);
                     }

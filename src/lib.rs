@@ -1,4 +1,4 @@
-use log::{debug, error, trace, warn};
+use log::{debug, trace, warn};
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
     parser::Parser,
     span::Span,
     token::Token,
-    values::{JSObject, JSResult, JSValue},
+    values::{JSObject, JSResult, JSValue, equal, same_value},
     variable::Variable,
 };
 
@@ -30,20 +30,31 @@ mod utils;
 mod values;
 mod variable;
 
-#[allow(dead_code)]
 pub struct Interpreter {
     current_environment_handle: usize,
     heap: Heap,
+    object_proto_id: usize,
+    function_proto_id: usize,
+    output_buffer: String,
+    error_buffer: String,
     source: String,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         let mut heap = Heap::new();
-        let id = heap.add_environment(Environment::new(None));
+        let object_proto = JSObject::create_object_proto(); // should always be 0. store anyways
+        let proto_id = heap.add_object(object_proto);
+        let env_id = heap.add_environment(Environment::new(None));
+        let function_proto = JSObject::create_function_proto(env_id, proto_id);
+        let function_proto_id = heap.add_object(function_proto);
         Self {
-            current_environment_handle: id,
+            current_environment_handle: env_id,
             heap,
+            object_proto_id: proto_id,
+            function_proto_id,
+            output_buffer: String::new(),
+            error_buffer: String::new(),
             source: "".to_owned(), // lil hack
         }
     }
@@ -54,7 +65,7 @@ impl Interpreter {
         self
     }
 
-    pub fn interpret(&mut self, source: &str) -> Result<(), String> {
+    pub fn interpret(&mut self, source: &str) -> Result<(String, String), String> {
         self.source = source.to_owned();
         let tokens = self.lex()?;
 
@@ -74,7 +85,10 @@ impl Interpreter {
             }
         }
 
-        Ok(())
+        let out = self.output_buffer.clone();
+        let err = self.error_buffer.clone();
+
+        Ok((out, err))
     }
 
     fn lex(&mut self) -> Result<Vec<Token>, String> {
@@ -237,6 +251,153 @@ impl Interpreter {
         debug!("var: {var:?}");
         Ok(JSValue::Undefined)
     }
+
+    fn get_object_proto_id(&self) -> usize {
+        self.object_proto_id
+    }
+
+    fn same_type(&self, left: &JSValue, right: &JSValue) -> JSResult<JSValue> {
+        Ok(JSValue::new_boolean(match left {
+            JSValue::Null => match right {
+                JSValue::Null => true,
+                _ => false,
+            },
+            JSValue::Undefined => match right {
+                JSValue::Undefined => true,
+                _ => false,
+            },
+            JSValue::Boolean { data: _ } => match right {
+                JSValue::Boolean { data: _ } => true,
+                _ => false,
+            },
+            JSValue::String { data: _ } => match right {
+                JSValue::String { data: _ } => true,
+                _ => false,
+            },
+            JSValue::Symbol {
+                id: _,
+                description: _,
+            } => match right {
+                JSValue::Symbol {
+                    id: _,
+                    description: _,
+                } => true,
+                _ => false,
+            },
+            JSValue::Number { data: _ } => match right {
+                JSValue::Number { data: _ } => true,
+                _ => false,
+            },
+            JSValue::BigInt => match right {
+                JSValue::BigInt => true,
+                _ => false,
+            },
+            JSValue::Object {
+                object_id: _,
+                kind: _,
+            } => match right {
+                JSValue::Object {
+                    object_id: _,
+                    kind: _,
+                } => true,
+                _ => false,
+            },
+        }))
+    }
+
+    fn same_value(&mut self, left: &JSValue, right: &JSValue) -> JSResult<JSValue> {
+        match left {
+            JSValue::Number { data: l_num } => {
+                let r_num = right.to_number(self)?.get_number();
+                return Ok(JSValue::new_boolean(same_value(*l_num, r_num)));
+            }
+            _ => self.same_value_non_number(left, right),
+        }
+    }
+
+    fn same_value_non_number(&mut self, left: &JSValue, right: &JSValue) -> JSResult<JSValue> {
+        Ok(JSValue::new_boolean(match left {
+            JSValue::Null | JSValue::Undefined => true,
+            JSValue::Boolean { data } => {
+                let right = right.to_boolean();
+                let result = *data == right;
+                result
+            }
+            JSValue::String { data } => {
+                let right = right.to_string(self)?;
+                *data == right
+            }
+            _ => true,
+        }))
+    }
+
+    fn is_loosely_equal(&mut self, left: &JSValue, right: &JSValue) -> JSResult<JSValue> {
+        let is_same_type = self.same_type(left, right)?.get_boolean();
+        if is_same_type {
+            return self.is_strictly_equal(left, right);
+        }
+        if left.is_null() && right.is_undefined() {
+            return Ok(JSValue::new_boolean(true));
+        }
+        if left.is_undefined() && right.is_null() {
+            return Ok(JSValue::new_boolean(true));
+        }
+        if left.is_number() && right.is_string() {
+            let right = right.to_number(self)?;
+            return self.is_loosely_equal(left, &right);
+        }
+
+        if left.is_string() && right.is_number() {
+            let left = left.to_number(self)?;
+            return self.is_loosely_equal(&left, right);
+        }
+
+        if left.is_big_int() && right.is_string() {
+            todo!()
+        }
+
+        if left.is_string() && right.is_big_int() {
+            return self.is_loosely_equal(right, left);
+        }
+
+        if left.is_boolean() {
+            let left = left.to_number(self)?;
+            return self.is_loosely_equal(&left, right);
+        }
+
+        if right.is_boolean() {
+            let right = right.to_number(self)?;
+            return self.is_loosely_equal(left, &right);
+        }
+
+        if (left.is_string() || left.is_number() || left.is_big_int() || left.is_symbol())
+            && right.is_object()
+        {
+            let right = right.to_primitive(None, self)?;
+            return self.is_loosely_equal(left, &right);
+        }
+
+        if (right.is_string() || right.is_number() || right.is_big_int() || right.is_symbol())
+            && left.is_object()
+        {
+            let left = right.to_primitive(None, self)?;
+            return self.is_loosely_equal(&left, right);
+        }
+
+        Ok(JSValue::new_boolean(false))
+    }
+
+    fn is_strictly_equal(&mut self, left: &JSValue, right: &JSValue) -> JSResult<JSValue> {
+        let is_same_type = self.same_type(left, right)?.get_boolean();
+        if !is_same_type {
+            return Ok(JSValue::new_boolean(false));
+        }
+        if left.is_number() {
+            let res = equal(left.get_number(), right.get_number());
+            return Ok(JSValue::new_boolean(res));
+        }
+        return self.same_value_non_number(left, right);
+    }
 }
 
 pub fn debug_value(interpreter: &mut Interpreter, value: &JSValue) -> String {
@@ -254,7 +415,7 @@ pub fn debug_value(interpreter: &mut Interpreter, value: &JSValue) -> String {
         } => todo!(),
         JSValue::Number { data } => data.to_string(),
         JSValue::BigInt => todo!(),
-        JSValue::Object { object_id } => {
+        JSValue::Object { object_id, kind: _ } => {
             let obj = interpreter.get_object(*object_id).unwrap().clone();
             obj.debug(interpreter)
         }

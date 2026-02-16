@@ -24,11 +24,33 @@ pub struct FunctionObject {
 }
 
 impl FunctionObject {
-    pub fn new(call: Box<Stmt>, environment_id: usize, parameters: Vec<SymbolU32>) -> Self {
-        let map = HashMap::new();
+    pub fn new_proto(env_id: usize, proto_id: usize) -> Self {
+        let mut properties = HashMap::new();
+        let length_id = get_or_intern_string("length");
+        let name_id = get_or_intern_string("name");
+        let length_val = ObjectProperty::new_from_value(JSValue::new_number(&0.0));
+        properties.insert(length_id, length_val);
+        let name_string_id = get_or_intern_string("");
+        let name_val = ObjectProperty::new_from_value(JSValue::new_string(&name_string_id));
+        properties.insert(name_id, name_val);
         Self {
-            prototype: None,
-            properties: map,
+            prototype: Some(proto_id),
+            environment_id: env_id,
+            call: Box::new(Stmt::Break),
+            formal_parameters: vec![],
+            properties,
+        }
+    }
+
+    pub fn new(
+        call: Box<Stmt>,
+        environment_id: usize,
+        proto_id: usize,
+        parameters: Vec<SymbolU32>,
+    ) -> Self {
+        Self {
+            prototype: Some(proto_id),
+            properties: HashMap::new(),
             call,
             environment_id,
             formal_parameters: parameters,

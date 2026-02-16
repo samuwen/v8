@@ -19,14 +19,13 @@ use crate::{
     },
     global::get_or_intern_string,
     stmt::Stmt,
-    values::{JSResult, JSValue, PreferredType, objects::array::Array},
+    values::{JSResult, JSValue, ObjectKind, PreferredType, objects::array::Array},
 };
 
 pub type ObjectId = usize;
 pub type Property = (SymbolU32, JSValue);
 pub type Properties = Vec<Property>;
 pub const TO_PRIMITIVE_SYM: &'static str = "@@toPrimitive";
-pub const CALL: &'static str = "call";
 
 #[derive(Clone, Debug)]
 pub enum JSObject {
@@ -36,8 +35,13 @@ pub enum JSObject {
 }
 
 impl JSObject {
-    pub fn new_ordinary_object(properties: Properties, interpreter: &mut Interpreter) -> usize {
-        let ordinary = OrdinaryObject::new(properties, interpreter);
+    pub fn new_ordinary_object(
+        properties: Properties,
+        extensible: bool,
+        proto: Option<usize>,
+        interpreter: &mut Interpreter,
+    ) -> usize {
+        let ordinary = OrdinaryObject::new(properties, extensible, proto);
         let object = JSObject::Ordinary(ordinary);
         interpreter.add_object(object)
     }
@@ -48,7 +52,9 @@ impl JSObject {
         environment_id: usize,
         interpreter: &mut Interpreter,
     ) -> usize {
-        let object = JSObject::Function(FunctionObject::new(call, environment_id, params));
+        let proto_id = interpreter.function_proto_id;
+        let object =
+            JSObject::Function(FunctionObject::new(call, environment_id, proto_id, params));
         interpreter.add_object(object)
     }
 
@@ -58,8 +64,19 @@ impl JSObject {
         interpreter.add_object(object)
     }
 
+    pub fn create_object_proto() -> Self {
+        let ordinary = OrdinaryObject::new(vec![], true, None);
+        JSObject::Ordinary(ordinary)
+    }
+
+    pub fn create_function_proto(env_id: usize, proto_id: usize) -> Self {
+        let function = FunctionObject::new_proto(env_id, proto_id);
+        JSObject::Function(function)
+    }
+
     pub fn create_global_object(interpreter: &mut Interpreter) {
-        let mut global_object = OrdinaryObject::new(vec![], interpreter);
+        let proto_id = interpreter.get_object_proto_id();
+        let mut global_object = OrdinaryObject::new(vec![], true, Some(proto_id));
 
         let inf_str_id = get_or_intern_string(INFINITY_NAME);
         let infinity = JSValue::new_number(&f64::INFINITY);
@@ -92,7 +109,10 @@ impl JSObject {
 
         let global_object = JSObject::Ordinary(global_object);
         let obj_id = interpreter.add_object(global_object);
-        let value = JSValue::Object { object_id: obj_id };
+        let value = JSValue::Object {
+            object_id: obj_id,
+            kind: ObjectKind::Object,
+        };
         let global_this_id = get_or_intern_string(GLOBAL_THIS_NAME);
         interpreter.new_variable(global_this_id, false, value);
     }
@@ -165,7 +185,10 @@ impl JSObject {
         let fn_object = f(interpreter);
         let js_object = JSObject::Function(fn_object);
         let object_id = interpreter.add_object(js_object);
-        let js_value = JSValue::Object { object_id };
+        let js_value = JSValue::Object {
+            object_id,
+            kind: ObjectKind::Function,
+        };
         (str_id, js_value)
     }
 
@@ -175,8 +198,12 @@ impl JSObject {
         interpreter: &mut Interpreter,
     ) -> Property {
         let str_id = get_or_intern_string(name);
-        let object_id = JSObject::new_ordinary_object(properties, interpreter);
-        let js_value = JSValue::Object { object_id };
+        // TODO - fix
+        let object_id = JSObject::new_ordinary_object(properties, true, None, interpreter);
+        let js_value = JSValue::Object {
+            object_id,
+            kind: ObjectKind::Object,
+        };
         (str_id, js_value)
     }
 }

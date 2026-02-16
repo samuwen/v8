@@ -9,7 +9,7 @@ use crate::{
     stmt::Stmt,
     token::{Kind, Token},
     utils::get_function_params,
-    values::{JSObject, JSResult, JSValue},
+    values::{JSObject, JSResult, JSValue, ObjectKind},
 };
 
 #[derive(Clone, Debug)]
@@ -150,14 +150,14 @@ impl Expr {
                     Kind::Bang => {
                         let val_as_bool = right.to_boolean();
                         let negated = !val_as_bool;
-                        Ok(JSValue::new_boolean(&negated))
+                        Ok(JSValue::new_boolean(negated))
                     }
                     Kind::Minus => {
-                        let val_as_number = right.to_numeric(interpreter)?;
+                        let val_as_number = right.to_numeric(interpreter)?.get_number();
                         Ok(JSValue::new_number(&-val_as_number))
                     }
                     Kind::Plus => {
-                        let val_as_number = right.to_numeric(interpreter)?;
+                        let val_as_number = right.to_numeric(interpreter)?.get_number();
                         Ok(JSValue::new_number(&val_as_number))
                     }
                     Kind::Void => Ok(JSValue::new_undefined()),
@@ -173,7 +173,7 @@ impl Expr {
                             } => "symbol",
                             JSValue::Number { data: _ } => "number",
                             JSValue::BigInt => "bigint",
-                            JSValue::Object { object_id } => {
+                            JSValue::Object { object_id, kind: _ } => {
                                 let obj = interpreter.get_object_mut(object_id)?;
                                 match obj.is_function() {
                                     true => "function",
@@ -197,6 +197,9 @@ impl Expr {
             } => {
                 let left = left.evaluate(interpreter)?;
                 let right = right.evaluate(interpreter)?;
+                if operator.is_equality_operator() {
+                    return left.compute_equality(operator, &right, interpreter);
+                }
                 if operator.is_binary_operator() {
                     return left.apply_string_or_numeric_binary_operator(
                         operator,
@@ -271,7 +274,7 @@ impl Expr {
                 let object = identifier.evaluate(interpreter)?;
                 let expr = expr.evaluate(interpreter)?;
                 let key = expr.to_string(interpreter)?;
-                if let JSValue::Object { object_id } = object {
+                if let JSValue::Object { object_id, kind: _ } = object {
                     let obj = interpreter.get_object(object_id).unwrap();
                     let property = obj.get_property(&key).unwrap();
                     let value = property.get_value()?.clone();
@@ -301,7 +304,10 @@ impl Expr {
                     JSObject::new_function_object(body.clone(), parameters, scope_id, interpreter);
 
                 // function expressions return the function itself
-                Ok(JSValue::Object { object_id })
+                Ok(JSValue::Object {
+                    object_id,
+                    kind: ObjectKind::Function,
+                })
             }
             Expr::PrintExpr { kind } => {
                 let data = get_or_intern_string("data");
@@ -314,10 +320,10 @@ impl Expr {
                     if let Some(out) = s {
                         match kind {
                             LogKind::Log => {
-                                println!("{out}");
+                                interpreter.output_buffer.push_str(&out);
                             }
                             LogKind::Error => {
-                                eprintln!("{out}");
+                                interpreter.error_buffer.push_str(&out);
                             }
                         }
                     }
