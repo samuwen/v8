@@ -8,6 +8,7 @@ mod ordinary;
 use core::f64;
 
 use function::*;
+use log::debug;
 use ordinary::*;
 use string_interner::symbol::SymbolU32;
 
@@ -151,11 +152,11 @@ impl JSObject {
     pub fn call(
         &self,
         args: Vec<JSValue>,
-        name: &SymbolU32,
+        name: Option<&SymbolU32>,
         interpreter: &mut Interpreter,
     ) -> JSResult<JSValue> {
         match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.call(name),
+            JSObject::Ordinary(ordinary_object) => ordinary_object.call(name.unwrap()),
             JSObject::Function(object) => object.call(args, interpreter),
             JSObject::Array(array) => todo!(),
         }
@@ -182,6 +183,7 @@ impl JSObject {
         F: Fn(&mut Interpreter) -> FunctionObject,
     {
         let str_id = get_or_intern_string(name);
+        debug!("{name} has id {str_id:?}");
         let fn_object = f(interpreter);
         let js_object = JSObject::Function(fn_object);
         let object_id = interpreter.add_object(js_object);
@@ -198,7 +200,6 @@ impl JSObject {
         interpreter: &mut Interpreter,
     ) -> Property {
         let str_id = get_or_intern_string(name);
-        // TODO - fix
         let object_id = JSObject::new_ordinary_object(properties, true, None, interpreter);
         let js_value = JSValue::Object {
             object_id,

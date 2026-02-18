@@ -25,28 +25,28 @@ mod tests {
 
     #[test]
     fn test_number_literals() {
-        assert_eq!(run("console.log(42);"), "42");
-        assert_eq!(run("console.log(3.14);"), "3.14");
-        assert_eq!(run("console.log(0);"), "0");
+        assert_eq!(run("console.log(42);"), "42\n");
+        assert_eq!(run("console.log(3.14);"), "3.14\n");
+        assert_eq!(run("console.log(0);"), "0\n");
     }
 
     #[test]
     fn test_string_literals() {
-        assert_eq!(run("console.log('hello');"), "hello");
-        assert_eq!(run("console.log(\"world\");"), "world");
-        assert_eq!(run("console.log('');"), "");
+        assert_eq!(run("console.log('hello');"), "hello\n");
+        assert_eq!(run("console.log(\"world\");"), "world\n");
+        assert_eq!(run("console.log('');"), "\n");
     }
 
     #[test]
     fn test_boolean_literals() {
-        assert_eq!(run("console.log(true);"), "true");
-        assert_eq!(run("console.log(false);"), "false");
+        assert_eq!(run("console.log(true);"), "true\n");
+        assert_eq!(run("console.log(false);"), "false\n");
     }
 
     #[test]
     fn test_null_undefined() {
-        assert_eq!(run("console.log(null);"), "null");
-        assert_eq!(run("console.log(undefined);"), "undefined");
+        assert_eq!(run("console.log(null);"), "null\n");
+        assert_eq!(run("console.log(undefined);"), "undefined\n");
     }
 
     // // ==========================================================================
@@ -55,46 +55,46 @@ mod tests {
 
     #[test]
     fn test_addition() {
-        assert_eq!(run("console.log(2 + 3);"), "5");
-        assert_eq!(run("console.log(10 + 20 + 30);"), "60");
+        assert_eq!(run("console.log(2 + 3);"), "5\n");
+        assert_eq!(run("console.log(10 + 20 + 30);"), "60\n");
     }
 
     #[test]
     fn test_subtraction() {
-        assert_eq!(run("console.log(10 - 3);"), "7");
-        assert_eq!(run("console.log(5 - 10);"), "-5");
+        assert_eq!(run("console.log(10 - 3);"), "7\n");
+        assert_eq!(run("console.log(5 - 10);"), "-5\n");
     }
 
     #[test]
     fn test_multiplication() {
-        assert_eq!(run("console.log(4 * 5);"), "20");
-        assert_eq!(run("console.log(3 * 2 * 2);"), "12");
+        assert_eq!(run("console.log(4 * 5);"), "20\n");
+        assert_eq!(run("console.log(3 * 2 * 2);"), "12\n");
     }
 
     #[test]
     fn test_division() {
-        assert_eq!(run("console.log(20 / 4);"), "5");
-        assert_eq!(run("console.log(7 / 2);"), "3.5");
+        assert_eq!(run("console.log(20 / 4);"), "5\n");
+        assert_eq!(run("console.log(7 / 2);"), "3.5\n");
     }
 
     #[test]
     fn test_modulo() {
-        assert_eq!(run("console.log(10 % 3);"), "1");
-        assert_eq!(run("console.log(20 % 7);"), "6");
+        assert_eq!(run("console.log(10 % 3);"), "1\n");
+        assert_eq!(run("console.log(20 % 7);"), "6\n");
     }
 
     #[test]
     fn test_operator_precedence() {
-        assert_eq!(run("console.log(2 + 3 * 4);"), "14");
-        assert_eq!(run("console.log((2 + 3) * 4);"), "20");
-        assert_eq!(run("console.log(10 - 2 * 3);"), "4");
+        assert_eq!(run("console.log(2 + 3 * 4);"), "14\n");
+        assert_eq!(run("console.log((2 + 3) * 4);"), "20\n");
+        assert_eq!(run("console.log(10 - 2 * 3);"), "4\n");
     }
 
     #[test]
     fn test_unary_operators() {
-        assert_eq!(run("console.log(-5);"), "-5");
-        assert_eq!(run("console.log(!true);"), "false");
-        assert_eq!(run("console.log(!false);"), "true");
+        assert_eq!(run("console.log(-5);"), "-5\n");
+        assert_eq!(run("console.log(!true);"), "false\n");
+        assert_eq!(run("console.log(!false);"), "true\n");
     }
 
     // // ==========================================================================
@@ -103,9 +103,12 @@ mod tests {
 
     #[test]
     fn test_string_concatenation() {
-        assert_eq!(run("console.log('hello' + ' ' + 'world');"), "hello world");
-        assert_eq!(run("console.log('num: ' + 42);"), "num: 42");
-        assert_eq!(run("console.log(5 + '3');"), "53");
+        assert_eq!(
+            run("console.log('hello' + ' ' + 'world');"),
+            "hello world\n"
+        );
+        assert_eq!(run("console.log('num: ' + 42);"), "num: 42\n");
+        assert_eq!(run("console.log(5 + '3');"), "53\n");
     }
 
     // // ==========================================================================
@@ -114,399 +117,399 @@ mod tests {
 
     #[test]
     fn test_equality() {
-        assert_eq!(run("console.log(5 == 5);"), "true");
-        assert_eq!(run("console.log(5 == 3);"), "false");
-        assert_eq!(run("console.log(5 != 3);"), "true");
-        assert_eq!(run("console.log(5 != 5);"), "false");
+        assert_eq!(run("console.log(5 == 5);"), "true\n");
+        assert_eq!(run("console.log(5 == 3);"), "false\n");
+        assert_eq!(run("console.log(5 != 3);"), "true\n");
+        assert_eq!(run("console.log(5 != 5);"), "false\n");
     }
 
     #[test]
     fn test_strict_equality() {
-        assert_eq!(run("console.log(5 === 5);"), "true");
-        assert_eq!(run("console.log(5 === 3);"), "false");
-        assert_eq!(run("console.log(5 === '5');"), "false");
-        assert_eq!(run("console.log(5 !== '5');"), "true");
-        assert_eq!(run("console.log(5 !== '3');"), "true");
-        assert_eq!(run("console.log(5 !== 3);"), "true");
+        assert_eq!(run("console.log(5 === 5);"), "true\n");
+        assert_eq!(run("console.log(5 === 3);"), "false\n");
+        assert_eq!(run("console.log(5 === '5');"), "false\n");
+        assert_eq!(run("console.log(5 !== '5');"), "true\n");
+        assert_eq!(run("console.log(5 !== '3');"), "true\n");
+        assert_eq!(run("console.log(5 !== 3);"), "true\n");
     }
 
     #[test]
     fn test_comparison() {
-        assert_eq!(run("console.log(5 > 3);"), "true");
-        assert_eq!(run("console.log(5 < 3);"), "false");
-        assert_eq!(run("console.log(5 >= 5);"), "true");
-        assert_eq!(run("console.log(5 <= 3);"), "false");
+        assert_eq!(run("console.log(5 > 3);"), "true\n");
+        assert_eq!(run("console.log(5 < 3);"), "false\n");
+        assert_eq!(run("console.log(5 >= 5);"), "true\n");
+        assert_eq!(run("console.log(5 <= 3);"), "false\n");
     }
 
     // // ==========================================================================
     // // LOGICAL OPERATORS
     // // ==========================================================================
 
-    // #[test]
-    // fn test_logical_and() {
-    //     assert_eq!(run("console.log(true && true);"), "true\n");
-    //     assert_eq!(run("console.log(true && false);"), "false\n");
-    //     assert_eq!(run("console.log(false && true);"), "false\n");
-    // }
+    #[test]
+    fn test_logical_and() {
+        assert_eq!(run("console.log(true && true);"), "true\n");
+        assert_eq!(run("console.log(true && false);"), "false\n");
+        assert_eq!(run("console.log(false && true);"), "false\n");
+    }
 
-    // #[test]
-    // fn test_logical_or() {
-    //     assert_eq!(run("console.log(true || false);"), "true\n");
-    //     assert_eq!(run("console.log(false || false);"), "false\n");
-    //     assert_eq!(run("console.log(false || true);"), "true\n");
-    // }
+    #[test]
+    fn test_logical_or() {
+        assert_eq!(run("console.log(true || false);"), "true\n");
+        assert_eq!(run("console.log(false || false);"), "false\n");
+        assert_eq!(run("console.log(false || true);"), "true\n");
+    }
 
-    // #[test]
-    // fn test_logical_short_circuit() {
-    //     assert_eq!(run("console.log(5 || 10);"), "5\n");
-    //     assert_eq!(run("console.log(0 || 10);"), "10\n");
-    //     assert_eq!(run("console.log(5 && 10);"), "10\n");
-    //     assert_eq!(run("console.log(0 && 10);"), "0\n");
-    // }
+    #[test]
+    fn test_logical_short_circuit() {
+        assert_eq!(run("console.log(5 || 10);"), "5\n");
+        assert_eq!(run("console.log(0 || 10);"), "10\n");
+        assert_eq!(run("console.log(5 && 10);"), "10\n");
+        assert_eq!(run("console.log(0 && 10);"), "0\n");
+    }
 
     // // ==========================================================================
     // // VARIABLES
     // // ==========================================================================
 
-    // #[test]
-    // fn test_let_declaration() {
-    //     assert_eq!(run("let x = 5; console.log(x);"), "5\n");
-    //     assert_eq!(run("let x; console.log(x);"), "undefined\n");
-    // }
+    #[test]
+    fn test_let_declaration() {
+        assert_eq!(run("let x = 5; console.log(x);"), "5\n");
+        assert_eq!(run("let x; console.log(x);"), "undefined\n");
+    }
 
-    // #[test]
-    // fn test_const_declaration() {
-    //     assert_eq!(run("const x = 10; console.log(x);"), "10\n");
-    // }
+    #[test]
+    fn test_const_declaration() {
+        assert_eq!(run("const x = 10; console.log(x);"), "10\n");
+    }
 
-    // #[test]
-    // fn test_var_declaration() {
-    //     assert_eq!(run("var x = 7; console.log(x);"), "7\n");
-    // }
+    #[test]
+    fn test_var_declaration() {
+        assert_eq!(run("var x = 7; console.log(x);"), "7\n");
+    }
 
-    // #[test]
-    // fn test_variable_assignment() {
-    //     assert_eq!(run("let x = 5; x = 10; console.log(x);"), "10\n");
-    //     assert_eq!(run("let x = 1; x = x + 1; console.log(x);"), "2\n");
-    // }
+    #[test]
+    fn test_variable_assignment() {
+        assert_eq!(run("let x = 5; x = 10; console.log(x);"), "10\n");
+        assert_eq!(run("let x = 1; x = x + 1; console.log(x);"), "2\n");
+    }
 
-    // #[test]
-    // fn test_multiple_variables() {
-    //     let source = r#"
-    //         let a = 5;
-    //         let b = 10;
-    //         let c = a + b;
-    //         console.log(c);
-    //     "#;
-    //     assert_eq!(run(source), "15\n");
-    // }
+    #[test]
+    fn test_multiple_variables() {
+        let source = r#"
+            let a = 5;
+            let b = 10;
+            let c = a + b;
+            console.log(c);
+        "#;
+        assert_eq!(run(source), "15\n");
+    }
 
     // // ==========================================================================
     // // IF STATEMENTS
     // // ==========================================================================
 
-    // #[test]
-    // fn test_if_true() {
-    //     let source = r#"
-    //         if (true) {
-    //             console.log('yes');
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "yes\n");
-    // }
+    #[test]
+    fn test_if_true() {
+        let source = r#"
+            if (true) {
+                console.log('yes');
+            }
+        "#;
+        assert_eq!(run(source), "yes\n");
+    }
 
-    // #[test]
-    // fn test_if_false() {
-    //     let source = r#"
-    //         if (false) {
-    //             console.log('yes');
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "");
-    // }
+    #[test]
+    fn test_if_false() {
+        let source = r#"
+            if (false) {
+                console.log('yes\n');
+            }
+        "#;
+        assert_eq!(run(source), "");
+    }
 
-    // #[test]
-    // fn test_if_else() {
-    //     let source = r#"
-    //         if (5 > 10) {
-    //             console.log('bigger');
-    //         } else {
-    //             console.log('smaller');
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "smaller\n");
-    // }
+    #[test]
+    fn test_if_else() {
+        let source = r#"
+            if (5 > 10) {
+                console.log('bigger');
+            } else {
+                console.log('smaller');
+            }
+        "#;
+        assert_eq!(run(source), "smaller\n");
+    }
 
-    // #[test]
-    // fn test_if_else_chain() {
-    //     let source = r#"
-    //         let x = 5;
-    //         if (x < 0) {
-    //             console.log('negative');
-    //         } else if (x == 0) {
-    //             console.log('zero');
-    //         } else {
-    //             console.log('positive');
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "positive\n");
-    // }
+    #[test]
+    fn test_if_else_chain() {
+        let source = r#"
+            let x = 5;
+            if (x < 0) {
+                console.log('negative');
+            } else if (x == 0) {
+                console.log('zero');
+            } else {
+                console.log('positive');
+            }
+        "#;
+        assert_eq!(run(source), "positive\n");
+    }
 
     // // ==========================================================================
     // // WHILE LOOPS
     // // ==========================================================================
 
-    // #[test]
-    // fn test_while_loop() {
-    //     let source = r#"
-    //         let i = 0;
-    //         while (i < 3) {
-    //             console.log(i);
-    //             i = i + 1;
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "0\n1\n2\n");
-    // }
+    #[test]
+    fn test_while_loop() {
+        let source = r#"
+            let i = 0;
+            while (i < 3) {
+                console.log(i);
+                i = i + 1;
+            }
+        "#;
+        assert_eq!(run(source), "0\n1\n2\n");
+    }
 
-    // #[test]
-    // fn test_while_break() {
-    //     let source = r#"
-    //         let i = 0;
-    //         while (true) {
-    //             if (i >= 2) {
-    //                 break;
-    //             }
-    //             console.log(i);
-    //             i = i + 1;
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "0\n1\n");
-    // }
+    #[test]
+    fn test_while_break() {
+        let source = r#"
+            let i = 0;
+            while (true) {
+                if (i >= 2) {
+                    break;
+                }
+                console.log(i);
+                i = i + 1;
+            }
+        "#;
+        assert_eq!(run(source), "0\n1\n");
+    }
 
-    // #[test]
-    // fn test_while_continue() {
-    //     let source = r#"
-    //         let i = 0;
-    //         while (i < 5) {
-    //             i = i + 1;
-    //             if (i == 3) {
-    //                 continue;
-    //             }
-    //             console.log(i);
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "1\n2\n4\n5\n");
-    // }
+    #[test]
+    fn test_while_continue() {
+        let source = r#"
+            let i = 0;
+            while (i < 5) {
+                i = i + 1;
+                if (i == 3) {
+                    continue;
+                }
+                console.log(i);
+            }
+        "#;
+        assert_eq!(run(source), "1\n2\n4\n5\n");
+    }
 
     // // ==========================================================================
     // // FOR LOOPS
     // // ==========================================================================
 
-    // #[test]
-    // fn test_for_loop() {
-    //     let source = r#"
-    //         for (let i = 0; i < 3; i = i + 1) {
-    //             console.log(i);
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "0\n1\n2\n");
-    // }
+    #[test]
+    fn test_for_loop() {
+        let source = r#"
+            for (let i = 0; i < 3; i = i + 1) {
+                console.log(i);
+            }
+        "#;
+        assert_eq!(run(source), "0\n1\n2\n");
+    }
 
-    // #[test]
-    // fn test_for_loop_no_init() {
-    //     let source = r#"
-    //         let i = 0;
-    //         for (; i < 3; i = i + 1) {
-    //             console.log(i);
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "0\n1\n2\n");
-    // }
+    #[test]
+    fn test_for_loop_no_init() {
+        let source = r#"
+            let i = 0;
+            for (; i < 3; i = i + 1) {
+                console.log(i);
+            }
+        "#;
+        assert_eq!(run(source), "0\n1\n2\n");
+    }
 
-    // #[test]
-    // fn test_for_loop_break() {
-    //     let source = r#"
-    //         for (let i = 0; i < 10; i = i + 1) {
-    //             if (i == 3) {
-    //                 break;
-    //             }
-    //             console.log(i);
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "0\n1\n2\n");
-    // }
+    #[test]
+    fn test_for_loop_break() {
+        let source = r#"
+            for (let i = 0; i < 10; i = i + 1) {
+                if (i == 3) {
+                    break;
+                }
+                console.log(i);
+            }
+        "#;
+        assert_eq!(run(source), "0\n1\n2\n");
+    }
 
-    // #[test]
-    // fn test_for_loop_continue() {
-    //     let source = r#"
-    //         for (let i = 0; i < 5; i = i + 1) {
-    //             if (i == 2) {
-    //                 continue;
-    //             }
-    //             console.log(i);
-    //         }
-    //     "#;
-    //     assert_eq!(run(source), "0\n1\n3\n4\n");
-    // }
+    #[test]
+    fn test_for_loop_continue() {
+        let source = r#"
+            for (let i = 0; i < 5; i = i + 1) {
+                if (i == 2) {
+                    continue;
+                }
+                console.log(i);
+            }
+        "#;
+        assert_eq!(run(source), "0\n1\n3\n4\n");
+    }
 
     // // ==========================================================================
     // // FUNCTIONS
     // // ==========================================================================
 
-    // #[test]
-    // fn test_function_declaration() {
-    //     let source = r#"
-    //         function greet() {
-    //             console.log('hello');
-    //         }
-    //         greet();
-    //     "#;
-    //     assert_eq!(run(source), "hello\n");
-    // }
+    #[test]
+    fn test_function_declaration() {
+        let source = r#"
+            function greet() {
+                console.log('hello');
+            }
+            greet();
+        "#;
+        assert_eq!(run(source), "hello\n");
+    }
 
-    // #[test]
-    // fn test_function_parameters() {
-    //     let source = r#"
-    //         function add(a, b) {
-    //             return a + b;
-    //         }
-    //         console.log(add(5, 3));
-    //     "#;
-    //     assert_eq!(run(source), "8\n");
-    // }
+    #[test]
+    fn test_function_parameters() {
+        let source = r#"
+            function add(a, b) {
+                return a + b;
+            }
+            console.log(add(5, 3));
+        "#;
+        assert_eq!(run(source), "8\n");
+    }
 
-    // #[test]
-    // fn test_function_return() {
-    //     let source = r#"
-    //         function double(x) {
-    //             return x * 2;
-    //         }
-    //         let result = double(7);
-    //         console.log(result);
-    //     "#;
-    //     assert_eq!(run(source), "14\n");
-    // }
+    #[test]
+    fn test_function_return() {
+        let source = r#"
+            function double(x) {
+                return x * 2;
+            }
+            let result = double(7);
+            console.log(result);
+        "#;
+        assert_eq!(run(source), "14\n");
+    }
 
-    // #[test]
-    // fn test_function_no_return() {
-    //     let source = r#"
-    //         function doNothing() {
-    //         }
-    //         console.log(doNothing());
-    //     "#;
-    //     assert_eq!(run(source), "undefined\n");
-    // }
+    #[test]
+    fn test_function_no_return() {
+        let source = r#"
+            function doNothing() {
+            }
+            console.log(doNothing());
+        "#;
+        assert_eq!(run(source), "undefined\n");
+    }
 
-    // #[test]
-    // fn test_function_expression() {
-    //     let source = r#"
-    //         let add = function(a, b) {
-    //             return a + b;
-    //         };
-    //         console.log(add(10, 20));
-    //     "#;
-    //     assert_eq!(run(source), "30\n");
-    // }
+    #[test]
+    fn test_function_expression() {
+        let source = r#"
+            let add = function(a, b) {
+                return a + b;
+            };
+            console.log(add(10, 20));
+        "#;
+        assert_eq!(run(source), "30\n");
+    }
 
-    // #[test]
-    // fn test_function_scope() {
-    //     let source = r#"
-    //         let x = 10;
-    //         function test() {
-    //             let x = 20;
-    //             console.log(x);
-    //         }
-    //         test();
-    //         console.log(x);
-    //     "#;
-    //     assert_eq!(run(source), "20\n10\n");
-    // }
+    #[test]
+    fn test_function_scope() {
+        let source = r#"
+            let x = 10;
+            function test() {
+                let x = 20;
+                console.log(x);
+            }
+            test();
+            console.log(x);
+        "#;
+        assert_eq!(run(source), "20\n10\n");
+    }
 
-    // #[test]
-    // fn test_closure() {
-    //     let source = r#"
-    //         function outer(x) {
-    //             function inner(y) {
-    //                 return x + y;
-    //             }
-    //             return inner;
-    //         }
-    //         let add5 = outer(5);
-    //         console.log(add5(3));
-    //     "#;
-    //     assert_eq!(run(source), "8\n");
-    // }
+    #[test]
+    fn test_closure() {
+        let source = r#"
+            function outer(x) {
+                function inner(y) {
+                    return x + y;
+                }
+                return inner;
+            }
+            let add5 = outer(5);
+            console.log(add5(3));
+        "#;
+        assert_eq!(run(source), "8\n");
+    }
 
-    // #[test]
-    // fn test_nested_functions() {
-    //     let source = r#"
-    //         function outer() {
-    //             function inner() {
-    //                 console.log('inner');
-    //             }
-    //             inner();
-    //         }
-    //         outer();
-    //     "#;
-    //     assert_eq!(run(source), "inner\n");
-    // }
+    #[test]
+    fn test_nested_functions() {
+        let source = r#"
+            function outer() {
+                function inner() {
+                    console.log('inner');
+                }
+                inner();
+            }
+            outer();
+        "#;
+        assert_eq!(run(source), "inner\n");
+    }
 
-    // #[test]
-    // fn test_recursive_function() {
-    //     let source = r#"
-    //         function factorial(n) {
-    //             if (n <= 1) {
-    //                 return 1;
-    //             }
-    //             return n * factorial(n - 1);
-    //         }
-    //         console.log(factorial(5));
-    //     "#;
-    //     assert_eq!(run(source), "120\n");
-    // }
+    #[test]
+    fn test_recursive_function() {
+        let source = r#"
+            function factorial(n) {
+                if (n <= 1) {
+                    return 1;
+                }
+                return n * factorial(n - 1);
+            }
+            console.log(factorial(5));
+        "#;
+        assert_eq!(run(source), "120\n");
+    }
 
     // // ==========================================================================
     // // ARROW FUNCTIONS
     // // ==========================================================================
 
-    // #[test]
-    // fn test_arrow_function_expression() {
-    //     let source = r#"
-    //         let double = x => x * 2;
-    //         console.log(double(5));
-    //     "#;
-    //     assert_eq!(run(source), "10\n");
-    // }
+    #[test]
+    fn test_arrow_function_expression() {
+        let source = r#"
+            let double = x => x * 2;
+            console.log(double(5));
+        "#;
+        assert_eq!(run(source), "10\n");
+    }
 
-    // #[test]
-    // fn test_arrow_function_multiple_params() {
-    //     let source = r#"
-    //         let add = (a, b) => a + b;
-    //         console.log(add(3, 7));
-    //     "#;
-    //     assert_eq!(run(source), "10\n");
-    // }
+    #[test]
+    fn test_arrow_function_multiple_params() {
+        let source = r#"
+            let add = (a, b) => a + b;
+            console.log(add(3, 7));
+        "#;
+        assert_eq!(run(source), "10\n");
+    }
 
-    // #[test]
-    // fn test_arrow_function_no_params() {
-    //     let source = r#"
-    //         let greet = () => console.log('hi');
-    //         greet();
-    //     "#;
-    //     assert_eq!(run(source), "hi\n");
-    // }
+    #[test]
+    fn test_arrow_function_no_params() {
+        let source = r#"
+            let greet = () => console.log('hi');
+            greet();
+        "#;
+        assert_eq!(run(source), "hi\n");
+    }
 
-    // #[test]
-    // fn test_arrow_function_block_body() {
-    //     let source = r#"
-    //         let add = (a, b) => {
-    //             let result = a + b;
-    //             return result;
-    //         };
-    //         console.log(add(4, 6));
-    //     "#;
-    //     assert_eq!(run(source), "10\n");
-    // }
+    #[test]
+    fn test_arrow_function_block_body() {
+        let source = r#"
+            let add = (a, b) => {
+                let result = a + b;
+                return result;
+            };
+            console.log(add(4, 6));
+        "#;
+        assert_eq!(run(source), "10\n");
+    }
 
     // // ==========================================================================
     // // ARRAYS

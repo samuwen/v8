@@ -201,6 +201,68 @@ impl<'a> Lexer<'a> {
                         self.add_token_and_advance(Kind::Bang);
                     }
                 }
+                '|' => {
+                    let peeked = self.peek_next_char();
+                    if peeked.is_none() {
+                        self.report_error("Unexpected end of file");
+                        break;
+                    }
+                    let peeked = peeked.unwrap().clone();
+                    match peeked {
+                        '|' => {
+                            self.next_char();
+                            let is_assignment = self.check_peeked_char('=');
+                            if is_assignment {
+                                self.add_token_and_advance(Kind::LogicalOrEquals);
+                            } else {
+                                self.add_token_and_advance(Kind::LogicalOr);
+                            }
+                        }
+                        '=' => {
+                            self.next_char();
+                            self.add_token_and_advance(Kind::BitwiseOrEquals);
+                        }
+                        _ => {
+                            if peeked.is_whitespace() {
+                                self.add_token_and_advance(Kind::BitwiseOr);
+                            } else {
+                                self.next_char();
+                                self.report_error(&format!("Unknown token: |{}", peeked));
+                            }
+                        }
+                    }
+                }
+                '&' => {
+                    let peeked = self.peek_next_char();
+                    if peeked.is_none() {
+                        self.report_error("Unexpected end of file");
+                        break;
+                    }
+                    let peeked = peeked.unwrap().clone();
+                    match peeked {
+                        '&' => {
+                            self.next_char();
+                            let is_assignment = self.check_peeked_char('=');
+                            if is_assignment {
+                                self.add_token_and_advance(Kind::LogicalAndEquals);
+                            } else {
+                                self.add_token_and_advance(Kind::LogicalAnd);
+                            }
+                        }
+                        '=' => {
+                            self.next_char();
+                            self.add_token_and_advance(Kind::BitwiseAndEquals);
+                        }
+                        _ => {
+                            if peeked.is_whitespace() {
+                                self.add_token_and_advance(Kind::BitwiseAnd);
+                            } else {
+                                self.next_char();
+                                self.report_error(&format!("Unknown token: &{}", peeked));
+                            }
+                        }
+                    }
+                }
                 '<' => {
                     let is_equals = self.check_peeked_char('=');
                     if is_equals {

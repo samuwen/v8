@@ -104,7 +104,7 @@ impl Expr {
         }
     }
 
-    pub fn new_object_call(identifier: Expr, expr: Expr) -> Self {
+    pub fn new_object_call(expr: Expr, identifier: Expr) -> Self {
         Self::ObjectCall {
             identifier: Box::new(identifier),
             expr: Box::new(expr),
@@ -187,7 +187,10 @@ impl Expr {
                     _ => panic!("Invalid unary operation: {:?}", operator.get_kind()),
                 }
             }
-            Self::Postfix { left, operator } => {
+            Self::Postfix {
+                left: _,
+                operator: _,
+            } => {
                 todo!()
             }
             Self::Binary {
@@ -207,19 +210,24 @@ impl Expr {
                         interpreter,
                     );
                 }
+                if *operator == Kind::LogicalOr {
+                    return JSValue::compute_logical_or(left, right);
+                }
+                if *operator == Kind::LogicalAnd {
+                    return JSValue::compute_logical_and(left, right);
+                }
                 panic!("{}", format!("Unhandled operator: {:?}", operator));
             }
             Expr::Assignment { identifier, right } => {
-                let ident_index = if let Expr::Identifier { string_index } = &**identifier {
+                let ident_index = if let Expr::Identifier { string_index } = **identifier {
                     string_index
                 } else {
-                    panic!("Assignment got passed a non-identifier identifier"); // programming error
+                    return Err(JSError::new("Invalid left-hand side in assignment"));
                 };
                 let rhs = right.evaluate(interpreter)?;
-                let exists = interpreter.get_variable_from_current_environment(*ident_index);
+                let exists = interpreter.get_variable_from_current_environment(ident_index);
                 match exists {
-                    Some(id) => {
-                        let var = interpreter.get_var(id)?;
+                    Ok(var) => {
                         if var.is_mutable() {
                             var.update_value(rhs.clone())?;
                             return Ok(rhs);
@@ -229,21 +237,14 @@ impl Expr {
                             ));
                         }
                     }
-                    None => {
-                        return Err(JSError::new("Syntax error: Variable is not initialized"));
-                    }
+                    Err(_) => Ok(JSValue::new_string(&ident_index)),
                 }
             }
             Expr::Grouping { expr } => Ok(expr.evaluate(interpreter)?),
             Expr::Identifier { string_index } => {
-                let exists = interpreter.get_value_from_environment(None, *string_index);
-                // let exists = interpreter.get_variable_from_environment(None, *string_index);
+                let exists = interpreter.get_value_from_environment(*string_index);
                 match exists {
-                    Ok(value) => {
-                        // already exists, so we evaluate the value
-                        Ok(value.clone())
-                    }
-                    // doesn't exist yet, this is a declaration / initialization. pass the interned index to the statement
+                    Ok(val) => Ok(val.clone()),
                     Err(_) => Ok(JSValue::new_string(string_index)),
                 }
             }
@@ -259,27 +260,84 @@ impl Expr {
                     })
                     .collect::<JSResult<Vec<JSValue>>>()?;
                 // get variable out of local environment
-                let idx = if let Expr::Identifier { string_index } = **identifier {
-                    string_index
-                } else {
-                    get_or_intern_string("data")
-                };
-
                 let value = identifier.evaluate(interpreter)?;
-                let object = value.get_object(interpreter)?.clone();
-                let result = object.call(args, &idx, interpreter)?;
-                Ok(result)
+                match value {
+                    JSValue::String { data: ident_index } => {
+                        let value = interpreter.get_value_from_environment(ident_index)?.clone();
+                        let object = value.get_object(interpreter)?.clone();
+                        let result = object.call(args, Some(&ident_index), interpreter)?;
+                        Ok(result)
+                    }
+                    JSValue::Object { object_id, kind } => {
+                        if let ObjectKind::Function = kind {
+                            let obj = interpreter.get_object(object_id)?.clone();
+                            let result = obj.call(args, None, interpreter)?;
+                            return Ok(result);
+                        }
+                        panic!("Attempting to call an ordinary object")
+                    }
+                    _ => panic!("Attempting to call something that should not be called"),
+                }
+                // let ident_index = value.to_string(interpreter)?;
+                // let value = interpreter
+                //     .get_value_from_environment(None, ident_index)?
+                //     .clone();
+                // let object = value.get_object(interpreter)?.clone();
+                // let result = object.call(args, &ident_index, interpreter)?;
+                // Ok(result)
             }
             Expr::ObjectCall { identifier, expr } => {
-                let object = identifier.evaluate(interpreter)?;
                 let expr = expr.evaluate(interpreter)?;
                 let key = expr.to_string(interpreter)?;
-                if let JSValue::Object { object_id, kind: _ } = object {
-                    let obj = interpreter.get_object(object_id).unwrap();
-                    let property = obj.get_property(&key).unwrap();
-                    let value = property.get_value()?.clone();
-                    return Ok(value);
+                let ident_res = identifier.evaluate(interpreter)?;
+                match ident_res {
+                    JSValue::Object { object_id, kind: _ } => {
+                        let object = interpreter.get_object(object_id)?;
+                        let property = object.get_property(&key).unwrap();
+                        let value = property.get_value()?.clone();
+                        return Ok(value);
+                    }
+                    JSValue::String { data: ident } => {
+                        let value = interpreter.get_value_from_environment(ident);
+                        let object = match value {
+                            Ok(v) => v,
+                            Err(_) => {
+                                let string_value =
+                                    get_string_from_pool(&ident).expect("Uninitialized string");
+                                return Err(JSError::new(&format!(
+                                    "Unitialized variable: {string_value}"
+                                )));
+                            }
+                        };
+                        if let JSValue::Object { object_id, kind: _ } = *object {
+                            let obj = interpreter.get_object(object_id).unwrap();
+                            let property = obj.get_property(&key).unwrap();
+                            let value = property.get_value()?.clone();
+                            return Ok(value);
+                        }
+                    }
+                    _ => unimplemented!(),
                 }
+                // println!("ident: {ident:?}");
+                // let ident = ident.to_string(interpreter)?;
+                // let value = interpreter.get_value_from_environment(ident);
+                // let object = match value {
+                //     Ok(v) => v,
+                //     Err(_) => {
+                //         let string_value =
+                //             get_string_from_pool(&ident).expect("Uninitialized string");
+                //         return Err(JSError::new(&format!(
+                //             "Unitialized variable: {string_value}"
+                //         )));
+                //     }
+                // };
+                // if let JSValue::Object { object_id, kind: _ } = *object {
+                //     let obj = interpreter.get_object(object_id).unwrap();
+                //     println!("obj: {obj:?}");
+                //     let property = obj.get_property(&key).unwrap();
+                //     let value = property.get_value()?.clone();
+                //     return Ok(value);
+                // }
 
                 Err(JSError::new("Object called with invalid property"))
             } // implement function expressions and arrow functions
@@ -303,27 +361,34 @@ impl Expr {
                 let object_id =
                     JSObject::new_function_object(body.clone(), parameters, scope_id, interpreter);
 
-                // function expressions return the function itself
-                Ok(JSValue::Object {
+                let object_val = JSValue::Object {
                     object_id,
                     kind: ObjectKind::Function,
-                })
+                };
+                interpreter.new_variable(ident_id, false, object_val.clone());
+
+                // function expressions return the function itself
+                Ok(object_val)
             }
             Expr::PrintExpr { kind } => {
                 let data = get_or_intern_string("data");
                 let variable = interpreter.get_variable_from_current_environment(data);
-                if let Some(var_id) = variable {
-                    let var = interpreter.get_var(var_id)?;
+                if let Ok(var) = variable {
                     let value = var.get_value_cloned();
                     let s = value.to_string(interpreter)?;
-                    let s = get_string_from_pool(&s);
-                    if let Some(out) = s {
-                        match kind {
-                            LogKind::Log => {
-                                interpreter.output_buffer.push_str(&out);
+                    let maybe_val = interpreter.get_value_from_environment(s);
+                    match maybe_val {
+                        Ok(val) => {
+                            let value = val.clone().to_string(interpreter)?;
+                            let string = get_string_from_pool(&value);
+                            if let Some(out) = string {
+                                add_message(&out, kind, interpreter);
                             }
-                            LogKind::Error => {
-                                interpreter.error_buffer.push_str(&out);
+                        }
+                        Err(_) => {
+                            let s = get_string_from_pool(&s);
+                            if let Some(out) = s {
+                                add_message(&out, kind, interpreter);
                             }
                         }
                     }
@@ -331,6 +396,25 @@ impl Expr {
 
                 Ok(JSValue::Undefined)
             }
+        }
+    }
+}
+
+fn add_message(message: &str, kind: &LogKind, interpreter: &mut Interpreter) {
+    let quote = '\'';
+    let len = message.len();
+    let message = if message.starts_with(quote) && message.ends_with(quote) {
+        &message[1..len - 1]
+    } else {
+        &message
+    };
+    let message = format!("{message}\n");
+    match kind {
+        LogKind::Log => {
+            interpreter.output_buffer.push_str(&message);
+        }
+        LogKind::Error => {
+            interpreter.error_buffer.push_str(&message);
         }
     }
 }

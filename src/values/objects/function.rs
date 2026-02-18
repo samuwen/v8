@@ -63,7 +63,7 @@ impl FunctionObject {
         interpreter: &mut Interpreter,
     ) -> JSResult<JSValue> {
         interpreter.enter_scope(Some(self.environment_id));
-        debug!("{:?}", arguments);
+        debug!("function arguments: {:?}", arguments);
         let args = arguments.iter();
         for (param, arg) in self.formal_parameters.iter().zip(args) {
             interpreter.bind_variable(*param, arg)?;

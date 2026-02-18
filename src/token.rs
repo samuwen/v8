@@ -96,6 +96,16 @@ pub enum Kind {
     GreaterThanOrEquals,
     Percent,
     Dot,
+    BitwiseOr,
+    LogicalOr,
+    BitwiseOrEquals, // |=
+    LogicalOrEquals, // ||=
+    BitwiseAnd,
+    LogicalAnd,
+    BitwiseAndEquals, // &=
+    LogicalAndEquals, // &&=
+
+    // special
     Eof,
 }
 

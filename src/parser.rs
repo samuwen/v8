@@ -197,13 +197,17 @@ impl<'a> Parser<'a> {
     }
 
     fn handle_assignment(&mut self) -> JSResult<Expr> {
-        let mut left = self.handle_equality()?;
+        let mut left = self.handle_logical_or()?;
         if self.current_token.is_kinds(vec![
             Kind::Equals,
             Kind::PlusEquals,
             Kind::MinusEquals,
             Kind::StarEquals,
             Kind::SlashEquals,
+            Kind::LogicalOrEquals,
+            Kind::LogicalAndEquals,
+            Kind::BitwiseOrEquals,
+            Kind::BitwiseAndEquals,
         ]) {
             let op_token = self.current_token.clone();
             self.next_token();
@@ -218,11 +222,37 @@ impl<'a> Parser<'a> {
                     Kind::MinusEquals => Kind::Minus,
                     Kind::StarEquals => Kind::Star,
                     Kind::SlashEquals => Kind::Slash,
+                    Kind::LogicalOrEquals => Kind::LogicalOr,
+                    Kind::LogicalAndEquals => Kind::LogicalAnd,
+                    Kind::BitwiseOrEquals => Kind::BitwiseOr,
+                    Kind::BitwiseAndEquals => Kind::BitwiseAnd,
                     _ => panic!("add the kind to the if list, dork"),
                 };
                 let right = Expr::new_binary(op, left.clone(), right);
                 left = Expr::new_assignment(left, right);
             }
+        }
+        Ok(left)
+    }
+
+    fn handle_logical_or(&mut self) -> JSResult<Expr> {
+        let mut left = self.handle_logical_and()?;
+        while self.current_token.is_kinds(vec![Kind::LogicalOr]) {
+            let operator = self.current_token.get_kind().clone();
+            self.next_token();
+            let right = self.handle_logical_and()?;
+            left = Expr::new_binary(operator, left, right);
+        }
+        Ok(left)
+    }
+
+    fn handle_logical_and(&mut self) -> JSResult<Expr> {
+        let mut left = self.handle_equality()?;
+        while self.current_token.is_kinds(vec![Kind::LogicalAnd]) {
+            let operator = self.current_token.get_kind().clone();
+            self.next_token();
+            let right = self.handle_equality()?;
+            left = Expr::new_binary(operator, left, right);
         }
         Ok(left)
     }
@@ -316,7 +346,8 @@ impl<'a> Parser<'a> {
             match prev.get_kind() {
                 Kind::Dot => {
                     let ident = self.get_identifier()?;
-                    left = Expr::new_object_call(left, ident);
+                    // looks weird - in this case we want to make sure that the 'identifier' is the called item
+                    left = Expr::new_object_call(ident, left);
                 }
                 Kind::LeftParen => {
                     let args = if self.current_token.is_kind(&Kind::RightParen) {
@@ -362,13 +393,26 @@ impl<'a> Parser<'a> {
                 return Ok(Expr::new_literal(JSValue::new_number(&num)));
             }
             Kind::String => {
-                let idx = get_or_intern_string(&source_value);
+                let source_with_quotes = format!("'{source_value}'");
+                let idx = get_or_intern_string(&source_with_quotes);
                 Ok(Expr::new_literal(JSValue::new_string(&idx)))
             }
             Kind::Identifier => {
                 check_identifier(&source_value)?;
                 let idx = get_or_intern_string(&source_value);
-                Ok(Expr::new_identifier(&idx))
+                let expr = Expr::new_identifier(&idx);
+                if self.current_token.is_kind(&Kind::Arrow) {
+                    // we're in an arrow function!
+                    self.next_token();
+                    let body = if self.current_token.is_kind(&Kind::LeftCurly) {
+                        self.handle_statements()?
+                    } else {
+                        let expr = self.handle_expressions()?;
+                        Stmt::new_expression(expr)
+                    };
+                    return Ok(Expr::new_function_decl(None, vec![expr], body));
+                }
+                Ok(expr)
             }
             Kind::True => Ok(Expr::new_literal(JSValue::new_boolean(true))),
             Kind::False => Ok(Expr::new_literal(JSValue::new_boolean(false))),
@@ -379,8 +423,14 @@ impl<'a> Parser<'a> {
                 if self.current_token.is_kind(&Kind::RightParen) {
                     self.next_token();
                     self.expect_and_consume(&Kind::Arrow, "ArrowFunction")?;
-                    let raw_body = self.handle_statements()?;
-                    return Ok(Expr::new_function_decl(None, vec![], raw_body));
+
+                    let body = if self.current_token.is_kind(&Kind::LeftCurly) {
+                        self.handle_statements()?
+                    } else {
+                        let expr = self.handle_expressions()?;
+                        Stmt::new_expression(expr)
+                    };
+                    return Ok(Expr::new_function_decl(None, vec![], body));
                 }
 
                 let expr = self.handle_expressions()?;
@@ -408,8 +458,14 @@ impl<'a> Parser<'a> {
                     self.expect_and_consume(&Kind::RightParen, "Expression")?;
                     // if next token is an arrow we're in arrow land
                     if self.current_token.is_kind(&Kind::Arrow) {
-                        let raw_body = self.handle_statements()?;
-                        return Ok(Expr::new_function_decl(None, vec![], raw_body));
+                        self.next_token();
+                        let body = if self.current_token.is_kind(&Kind::LeftCurly) {
+                            self.handle_statements()?
+                        } else {
+                            let expr = self.handle_expressions()?;
+                            Stmt::new_expression(expr)
+                        };
+                        return Ok(Expr::new_function_decl(None, vec![expr], body));
                     }
                     // otherwise its just a parenthetical
                     Ok(Expr::new_grouping(expr))

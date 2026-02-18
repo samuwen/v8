@@ -4,7 +4,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use log::debug;
+use log::{debug, trace};
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -14,9 +14,9 @@ use crate::{
     global::{get_or_intern_string, get_string_from_pool},
     stmt::Stmt,
     token::Kind,
-    utils::get_function_params,
+    utils::{get_function_params, remove_quotes_from_string},
     values::{
-        JSResult, ObjectKind, PreferredType, add, divide, equal, less_than, multiply,
+        JSResult, ObjectKind, PreferredType, add, bitwise_or, divide, equal, less_than, multiply,
         objects::{JSObject, ObjectId, Properties},
         remainder, subtract,
     },
@@ -46,6 +46,7 @@ pub enum JSValue {
     BigInt,
     Object { object_id: usize, kind: ObjectKind },
 }
+// TODO - add identifier type
 
 impl JSValue {
     pub fn to_primitive(
@@ -128,7 +129,7 @@ impl JSValue {
         }
     }
 
-    pub fn to_integer_or_infinity(&self, interpreter: &mut Interpreter) -> JSResult<Self> {
+    pub fn to_integer_or_infinity(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         let number = self.to_number(interpreter)?.get_number();
         if number.is_nan() || number == 0.0 {
             return Ok(JSValue::new_number(&0.0));
@@ -140,9 +141,15 @@ impl JSValue {
         Ok(JSValue::new_number(&floored))
     }
 
+    pub fn is_finite(&self, interpreter: &mut Interpreter) -> JSResult<bool> {
+        let number = self.to_number(interpreter)?.get_number();
+        Ok(number.is_finite())
+    }
+
     pub fn to_int_32(&self, interpreter: &mut Interpreter) -> JSResult<i32> {
         let number = self.to_number(interpreter)?.get_number();
-        if number.is_infinite() || number == 0.0 || number == -0.0 {
+        let is_finite = self.is_finite(interpreter)?;
+        if !is_finite || number == 0.0 || number == -0.0 {
             return Ok(0);
         }
         let int = number.trunc() as i32;
@@ -157,7 +164,8 @@ impl JSValue {
 
     pub fn to_uint_32(&self, interpreter: &mut Interpreter) -> JSResult<u32> {
         let number = self.to_number(interpreter)?.get_number();
-        if number.is_infinite() || number == 0.0 || number == -0.0 {
+        let is_finite = self.is_finite(interpreter)?;
+        if !is_finite || number == 0.0 || number == -0.0 {
             return Ok(0);
         }
         let int = number.trunc() as u32;
@@ -168,8 +176,8 @@ impl JSValue {
 
     pub fn to_int_16(&self, interpreter: &mut Interpreter) -> JSResult<i16> {
         let number = self.to_number(interpreter)?.get_number();
-
-        if number.is_infinite() || number == 0.0 || number == -0.0 {
+        let is_finite = self.is_finite(interpreter)?;
+        if !is_finite || number == 0.0 || number == -0.0 {
             return Ok(0);
         }
         let int = number.trunc() as i16;
@@ -184,7 +192,8 @@ impl JSValue {
 
     pub fn to_uint_16(&self, interpreter: &mut Interpreter) -> JSResult<u16> {
         let number = self.to_number(interpreter)?.get_number();
-        if number.is_infinite() || number == 0.0 || number == -0.0 {
+        let is_finite = self.is_finite(interpreter)?;
+        if !is_finite || number == 0.0 || number == -0.0 {
             return Ok(0);
         }
         let int = number.trunc() as u16;
@@ -196,7 +205,8 @@ impl JSValue {
     pub fn to_int_8(&self, interpreter: &mut Interpreter) -> JSResult<i8> {
         let number = self.to_number(interpreter)?.get_number();
 
-        if number.is_infinite() || number == 0.0 || number == -0.0 {
+        let is_finite = self.is_finite(interpreter)?;
+        if !is_finite || number == 0.0 || number == -0.0 {
             return Ok(0);
         }
         let int = number.trunc() as i8;
@@ -211,7 +221,8 @@ impl JSValue {
 
     pub fn to_uint_8(&self, interpreter: &mut Interpreter) -> JSResult<u8> {
         let number = self.to_number(interpreter)?.get_number();
-        if number.is_infinite() || number == 0.0 || number == -0.0 {
+        let is_finite = self.is_finite(interpreter)?;
+        if !is_finite || number == 0.0 || number == -0.0 {
             return Ok(0);
         }
         let int = number.trunc() as u8;
@@ -335,7 +346,6 @@ impl JSValue {
     }
 
     pub fn new_object(properties: Properties, interpreter: &mut Interpreter) -> Self {
-        // TODO - fix
         let object_id = JSObject::new_ordinary_object(properties, true, None, interpreter);
         Self::Object {
             object_id,
@@ -365,6 +375,7 @@ impl JSValue {
     }
 
     pub fn new_string(s: &SymbolU32) -> Self {
+        trace!("new string: {}", get_string_from_pool(s).unwrap());
         Self::String { data: *s }
     }
 
@@ -414,20 +425,32 @@ impl JSValue {
         right: &JSValue,
         interpreter: &mut Interpreter,
     ) -> JSResult<JSValue> {
-        let left_prim = self.to_primitive(None, interpreter)?;
-        let right_prim = right.to_primitive(None, interpreter)?;
-        if left_prim.is_string() || right_prim.is_string() {
-            let left_str_sym = left_prim.to_string(interpreter)?;
-            let right_str_sym = right_prim.to_string(interpreter)?;
-            let left_str = get_string_from_pool(&left_str_sym).unwrap(); // panic should be fine here, programmer error not JS error
-            let right_str = get_string_from_pool(&right_str_sym).unwrap();
-            let concatenated = format!("{left_str}{right_str}");
-            let id = get_or_intern_string(&concatenated);
-            return Ok(JSValue::new_string(&id));
-        }
+        let mut l_val = self.clone();
+        let mut r_val = right.clone();
+        if *op == Kind::Plus {
+            let left_prim = self.to_primitive(None, interpreter)?;
+            let right_prim = right.to_primitive(None, interpreter)?;
+
+            if left_prim.is_string() || right_prim.is_string() {
+                let left_str_sym = left_prim.to_string(interpreter)?;
+                let right_str_sym = right_prim.to_string(interpreter)?;
+                let left_str = get_string_from_pool(&left_str_sym).unwrap(); // panic should be fine here, programmer error not JS error
+                let right_str = get_string_from_pool(&right_str_sym).unwrap();
+                // we store strings with quote marks to distinguish from identifiers
+                // concatenation means stripping the quotes (if present, it is valid to concatenate an identifier too)
+                // then adding them back in at the end as we know we have a string
+                let left_str = remove_quotes_from_string(&left_str);
+                let right_str = remove_quotes_from_string(&right_str);
+                let concatenated = format!("'{left_str}{right_str}'");
+                let id = get_or_intern_string(&concatenated);
+                return Ok(JSValue::new_string(&id));
+            }
+            l_val = left_prim;
+            r_val = right_prim;
+        };
         // must be numbers at this point
-        let l_num = left_prim.to_numeric(interpreter)?.get_number();
-        let r_num = right_prim.to_numeric(interpreter)?.get_number();
+        let l_num = l_val.to_numeric(interpreter)?.get_number();
+        let r_num = r_val.to_numeric(interpreter)?.get_number();
         debug!("Checking: {} {:?} {}", l_num, op, r_num);
         // assert these are the same type when doing bigints
         let result = match op {
@@ -462,6 +485,10 @@ impl JSValue {
                 let result = equal(l_num, r_num);
                 return Ok(JSValue::new_boolean(!result));
             }
+            Kind::BitwiseOr => {
+                let result = bitwise_or(l_num, r_num, interpreter);
+                result as f64
+            }
             _ => panic!("the disco"),
         };
         Ok(JSValue::new_number(&result))
@@ -488,6 +515,22 @@ impl JSValue {
             }
             _ => panic!("Unhandled equality operator: {:?}", operator),
         }
+    }
+
+    pub fn compute_logical_and(v1: Self, v2: Self) -> JSResult<Self> {
+        let b1 = v1.to_boolean();
+        if !b1 {
+            return Ok(v1);
+        }
+        Ok(v2)
+    }
+
+    pub fn compute_logical_or(v1: Self, v2: Self) -> JSResult<Self> {
+        let b1 = v1.to_boolean();
+        if b1 {
+            return Ok(v1);
+        }
+        Ok(v2)
     }
 
     pub fn get_number(&self) -> f64 {

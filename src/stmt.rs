@@ -105,10 +105,12 @@ impl Stmt {
     pub fn evaluate(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         match self {
             Stmt::Block(stmts) => {
+                interpreter.enter_scope(None);
                 for stmt in stmts {
                     let res = stmt.evaluate(interpreter)?;
                     info!("statement result: {res:?}");
                 }
+                interpreter.leave_scope();
                 Ok(JSValue::Undefined)
             }
             Stmt::Break => Err(JSError::new_break()),
@@ -120,23 +122,26 @@ impl Stmt {
                 state,
                 body,
             } => {
-                let mut entered_scope = false;
+                interpreter.enter_scope(None);
                 if let Some(stmt) = initializer {
-                    interpreter.enter_scope(None);
-                    entered_scope = true;
                     stmt.evaluate(interpreter)?;
                 }
+                let mut abort_count = 0;
                 'forst: loop {
+                    if abort_count > 100 {
+                        panic!("infinite loop")
+                    }
                     if let Some(expr) = condition {
                         let value = expr.evaluate(interpreter)?;
                         if !value.to_boolean() {
                             break 'forst;
                         }
                     }
+                    let body_res = body.evaluate(interpreter);
                     if let Some(expr) = state {
                         expr.evaluate(interpreter)?;
                     }
-                    let body_res = body.evaluate(interpreter);
+
                     if let Err(e) = body_res {
                         if e.kind == ErrorKind::Break {
                             break;
@@ -144,11 +149,10 @@ impl Stmt {
                             continue;
                         }
                     }
+                    abort_count += 1;
                 }
 
-                if entered_scope {
-                    interpreter.leave_scope();
-                }
+                interpreter.leave_scope();
                 Ok(JSValue::Undefined)
             }
             Stmt::FunctionDecl {
@@ -181,6 +185,7 @@ impl Stmt {
                 branch_false,
             } => {
                 let evaluated_condition = condition.evaluate(interpreter)?;
+                interpreter.enter_scope(None);
                 if evaluated_condition.to_boolean() {
                     let b_true = branch_true.evaluate(interpreter)?;
                     return Ok(b_true);
@@ -188,6 +193,7 @@ impl Stmt {
                     let b_false = branch_false.evaluate(interpreter)?;
                     return Ok(b_false);
                 }
+                interpreter.leave_scope();
                 Ok(JSValue::Undefined)
             }
             Stmt::Return(expr) => {
@@ -208,9 +214,6 @@ impl Stmt {
             } => {
                 // establish the variable name
                 let ident = identifier.evaluate(interpreter)?;
-                if !ident.is_string() {
-                    return Err(JSError::new("Expected string"));
-                }
                 let str_id = ident.to_string(interpreter)?;
                 // right hand side is either the expr evaluation or undefined
                 let rhs = match initializer {

@@ -34,3 +34,14 @@ pub fn get_function_params(
         .collect::<JSResult<Vec<SymbolU32>>>()?;
     Ok(parameters)
 }
+
+pub fn remove_quotes_from_string(string: &str) -> String {
+    let single_quote = '\'';
+    let double_quote = '"';
+    string.chars().fold(String::new(), |mut acc, c| {
+        if c != single_quote && c != double_quote {
+            acc.push(c)
+        }
+        acc
+    })
+}

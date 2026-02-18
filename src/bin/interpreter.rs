@@ -74,10 +74,10 @@ fn main() -> Result<()> {
                     };
                     let (out, err) = interpreter.interpret(&line).unwrap();
                     if out.len() > 0 {
-                        println!("{out}");
+                        print!("{out}");
                     }
                     if err.len() > 0 {
-                        eprintln!("{err}");
+                        eprint!("{err}");
                     }
                 }
                 Err(ReadlineError::Interrupted) => {

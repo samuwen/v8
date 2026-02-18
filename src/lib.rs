@@ -1,5 +1,5 @@
-use log::{debug, trace, warn};
-use string_interner::symbol::SymbolU32;
+use log::{debug, info, trace};
+use string_interner::{Symbol, symbol::SymbolU32};
 
 use crate::{
     constants::GLOBAL_THIS_NAME,
@@ -31,7 +31,7 @@ mod values;
 mod variable;
 
 pub struct Interpreter {
-    current_environment_handle: usize,
+    environment_stack: Vec<usize>,
     heap: Heap,
     object_proto_id: usize,
     function_proto_id: usize,
@@ -45,11 +45,12 @@ impl Interpreter {
         let mut heap = Heap::new();
         let object_proto = JSObject::create_object_proto(); // should always be 0. store anyways
         let proto_id = heap.add_object(object_proto);
-        let env_id = heap.add_environment(Environment::new(None));
+        let env_id = heap.add_environment(Environment::new());
         let function_proto = JSObject::create_function_proto(env_id, proto_id);
         let function_proto_id = heap.add_object(function_proto);
+        let environment_stack = vec![env_id];
         Self {
-            current_environment_handle: env_id,
+            environment_stack,
             heap,
             object_proto_id: proto_id,
             function_proto_id,
@@ -142,56 +143,64 @@ impl Interpreter {
             .get_current_environment_mut()
             .expect("Somehow you deleted all environments");
         current_environment.add_variable(str_id, var_id);
+        debug!(
+            "Added variable id: {} to environment {current_environment}",
+            str_id.to_usize()
+        );
     }
 
-    fn get_value_from_environment(
-        &mut self,
-        env_id_opt: Option<usize>,
-        str_id: SymbolU32,
-    ) -> JSResult<&JSValue> {
-        let env_id = env_id_opt.unwrap_or(self.current_environment_handle);
-        let environment = self.get_environment(env_id)?;
-        let var_result = environment.get_variable(str_id, self);
-        match var_result {
-            Some(var_id) => {
+    fn get_value_from_environment(&mut self, str_id: SymbolU32) -> JSResult<&JSValue> {
+        for id in self.environment_stack.iter().rev() {
+            let environment = self.get_environment(*id)?;
+            let var_result = environment.get_variable(str_id);
+            if let Some(var_id) = var_result {
                 let var = self.get_var(var_id)?;
                 let val = var.get_value();
                 return Ok(val);
             }
-            None => {
-                let parent_handle_opt = environment.get_parent_handle();
-                match parent_handle_opt {
-                    Some(handle) => {
-                        return self.get_value_from_environment(Some(handle), str_id);
-                    }
-                    None => {
-                        let global_this_id = get_or_intern_string(GLOBAL_THIS_NAME);
-                        let global_this_val =
-                            self.get_value_from_environment(None, global_this_id)?;
-                        let object_id = global_this_val.get_object_id()?;
-                        let global_this = self.get_object(object_id)?;
-                        let prop = global_this.get_property(&str_id);
-                        if let Some(prop) = prop {
-                            let val = prop.get_value()?;
-                            return Ok(val);
-                        }
-                    }
+        }
+
+        // we didn't find the variable - so check the global object since it wasn't invoked directly
+        self.get_value_from_global_this(str_id)
+    }
+
+    fn get_value_from_global_this(&mut self, str_id: SymbolU32) -> JSResult<&JSValue> {
+        let global_environment_id = self
+            .environment_stack
+            .get(0)
+            .expect("Why did you delete the global environment?"); // should always exist
+        let global_environment = self.get_environment(*global_environment_id)?;
+        let global_this = get_or_intern_string(GLOBAL_THIS_NAME);
+        let var_result = global_environment.get_variable(global_this);
+        if let Some(var_id) = var_result {
+            let var = self.get_var(var_id)?;
+            let val = var.get_value().clone();
+            // always true
+            if let JSValue::Object { object_id, kind: _ } = val {
+                let object = self.get_object(object_id)?;
+                let prop = object.get_property(&str_id);
+                if let Some(prop) = prop {
+                    let value = prop.get_value()?;
+                    return Ok(value);
                 }
             }
         }
-
         Err(JSError::new("Variable not found in environment"))
     }
 
-    fn get_variable_from_current_environment(&self, string_id: SymbolU32) -> Option<usize> {
-        let current_environment = self
-            .get_current_environment()
-            .expect("Somehow you deleted all environments");
-        current_environment.get_variable(string_id, self)
-    }
-
-    fn get_current_environment(&self) -> JSResult<&Environment> {
-        self.get_environment(self.current_environment_handle)
+    fn get_variable_from_current_environment(
+        &mut self,
+        string_id: SymbolU32,
+    ) -> JSResult<&mut Variable> {
+        for id in self.environment_stack.iter().rev() {
+            let environment = self.get_environment(*id)?;
+            let var_result = environment.get_variable(string_id);
+            if let Some(var_id) = var_result {
+                let var = self.get_var(var_id)?;
+                return Ok(var);
+            }
+        }
+        Err(JSError::new("Variable not found"))
     }
 
     fn get_environment(&self, id: HeapId) -> JSResult<&Environment> {
@@ -202,8 +211,16 @@ impl Interpreter {
         self.heap.get_environment_mut(id)
     }
 
+    fn get_current_environment_handle(&self) -> usize {
+        *self
+            .environment_stack
+            .last()
+            .expect("Environment stack is empty")
+    }
+
     fn get_current_environment_mut(&mut self) -> JSResult<&mut Environment> {
-        self.get_environment_mut(self.current_environment_handle)
+        let handle = self.get_current_environment_handle();
+        self.get_environment_mut(handle)
     }
 
     fn add_value(&mut self, value: JSValue) -> usize {
@@ -215,38 +232,29 @@ impl Interpreter {
     }
 
     fn new_scope(&mut self) -> usize {
-        let new_env = Environment::new(Some(self.current_environment_handle));
+        let new_env = Environment::new();
         self.heap.add_environment(new_env)
     }
 
     fn enter_scope(&mut self, scope_id: Option<usize>) -> usize {
+        info!("Entering scope");
         let id = match scope_id {
             Some(id) => id,
             None => self.new_scope(),
         };
-        self.current_environment_handle = id;
+        self.environment_stack.push(id);
         id
     }
 
     fn leave_scope(&mut self) {
-        let current_env = self
-            .get_current_environment_mut()
-            .expect("Somehow you deleted all environments");
-        let parent = current_env.get_parent_handle();
-        if parent.is_none() {
-            // we're in root, likely a global scoped fn was called
-            warn!("Attempting to leave the global scope. Programmer error?");
-            return;
-        }
-        let parent_id = parent.unwrap();
-        self.current_environment_handle = parent_id;
+        info!("Leaving scope");
+        self.environment_stack.pop();
     }
 
     fn bind_variable(&mut self, param_id: SymbolU32, value: &JSValue) -> JSResult<JSValue> {
-        let var_id = self
+        let var = self
             .get_variable_from_current_environment(param_id)
             .unwrap();
-        let var = self.get_var(var_id)?;
         var.update_value(value.clone())?;
         debug!("var: {var:?}");
         Ok(JSValue::Undefined)
@@ -305,7 +313,7 @@ impl Interpreter {
         }))
     }
 
-    fn same_value(&mut self, left: &JSValue, right: &JSValue) -> JSResult<JSValue> {
+    fn _same_value(&mut self, left: &JSValue, right: &JSValue) -> JSResult<JSValue> {
         match left {
             JSValue::Number { data: l_num } => {
                 let r_num = right.to_number(self)?.get_number();
