@@ -3,33 +3,25 @@ use std::collections::HashMap;
 use log::trace;
 use string_interner::{Symbol, symbol::SymbolU32};
 
-use crate::global::get_string_from_pool;
+use crate::{global::get_string_from_pool, variable::VariableId};
 
-type EnvironmentId = usize;
 type StringId = SymbolU32;
 
 #[derive(Debug, Clone)]
 pub struct Environment {
-    is_expired: bool,
-    handles: HashMap<StringId, usize>, // stringID: variableID (maps string names to variable ids)
+    _is_expired: bool,
+    handles: HashMap<StringId, VariableId>, // stringID: variableID (maps string names to variable ids)
 }
 
 impl Environment {
     pub fn new() -> Self {
         Self {
-            is_expired: false,
+            _is_expired: false,
             handles: HashMap::new(),
         }
     }
 
-    pub fn has_variable(&self, string_id: StringId) -> bool {
-        if self.handles.contains_key(&string_id) {
-            return true;
-        }
-        false
-    }
-
-    pub fn get_variable(&self, string_id: StringId) -> Option<usize> {
+    pub fn get_variable(&self, string_id: StringId) -> Option<VariableId> {
         let maybe_handle = self.handles.get(&string_id);
         if let Some(handle) = maybe_handle {
             return Some(*handle);
@@ -37,13 +29,13 @@ impl Environment {
         None
     }
 
-    pub fn add_variable(&mut self, string_id: StringId, variable_id: usize) {
+    pub fn add_variable(&mut self, string_id: StringId, variable_id: VariableId) {
         self.handles.insert(string_id, variable_id);
         trace!("{:?}", self);
     }
 
-    pub fn expire(&mut self) {
-        self.is_expired = true;
+    pub fn _expire(&mut self) {
+        self._is_expired = true;
     }
 }
 

@@ -6,7 +6,7 @@ use crate::{
     values::{JSResult, JSValue},
 };
 
-pub type _VariableId = usize;
+pub type VariableId = usize;
 
 #[allow(dead_code)]
 #[derive(Debug)]
