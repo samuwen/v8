@@ -89,6 +89,10 @@ impl OrdinaryObject {
         self.properties.get(key)
     }
 
+    pub fn get_property_mut(&mut self, key: &SymbolU32) -> Option<&mut ObjectProperty> {
+        self.properties.get_mut(key)
+    }
+
     pub fn add_property(&mut self, key: SymbolU32, value: ObjectProperty) {
         self.properties.insert(key, value);
     }

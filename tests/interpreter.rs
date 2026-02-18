@@ -515,45 +515,45 @@ mod tests {
     // // ARRAYS
     // // ==========================================================================
 
-    // #[test]
-    // fn test_array_literal() {
-    //     let source = r#"
-    //         let arr = [1, 2, 3];
-    //         console.log(arr[0]);
-    //         console.log(arr[1]);
-    //         console.log(arr[2]);
-    //     "#;
-    //     assert_eq!(run(source), "1\n2\n3\n");
-    // }
+    #[test]
+    fn test_array_literal() {
+        let source = r#"
+            let arr = [1, 2, 3];
+            console.log(arr[0]);
+            console.log(arr[1]);
+            console.log(arr[2]);
+        "#;
+        assert_eq!(run(source), "1\n2\n3\n");
+    }
 
-    // #[test]
-    // fn test_empty_array() {
-    //     let source = r#"
-    //         let arr = [];
-    //         console.log(arr);
-    //     "#;
-    //     assert_eq!(run(source), "[]\n");
-    // }
+    #[test]
+    fn test_empty_array() {
+        let source = r#"
+            let arr = [];
+            console.log(arr);
+        "#;
+        assert_eq!(run(source), "[]\n");
+    }
 
-    // #[test]
-    // fn test_array_assignment() {
-    //     let source = r#"
-    //         let arr = [1, 2, 3];
-    //         arr[1] = 10;
-    //         console.log(arr[1]);
-    //     "#;
-    //     assert_eq!(run(source), "10\n");
-    // }
+    #[test]
+    fn test_array_assignment() {
+        let source = r#"
+            let arr = [1, 2, 3];
+            arr[1] = 10;
+            console.log(arr[1]);
+        "#;
+        assert_eq!(run(source), "10\n");
+    }
 
-    // #[test]
-    // fn test_nested_arrays() {
-    //     let source = r#"
-    //         let arr = [[1, 2], [3, 4]];
-    //         console.log(arr[0][1]);
-    //         console.log(arr[1][0]);
-    //     "#;
-    //     assert_eq!(run(source), "2\n3\n");
-    // }
+    #[test]
+    fn test_nested_arrays() {
+        let source = r#"
+            let arr = [[1, 2], [3, 4]];
+            console.log(arr[0][1]);
+            console.log(arr[1][0]);
+        "#;
+        assert_eq!(run(source), "2\n3\n");
+    }
 
     // // ==========================================================================
     // // OBJECTS

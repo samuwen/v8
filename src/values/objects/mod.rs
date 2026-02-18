@@ -118,11 +118,15 @@ impl JSObject {
         interpreter.new_variable(global_this_id, false, value);
     }
 
-    pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
+    pub fn to_primitive(
+        &self,
+        hint: PreferredType,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<JSValue> {
         match self {
             JSObject::Ordinary(ordinary_object) => ordinary_object.to_primitive(hint),
             JSObject::Function(function_object) => function_object.to_primitive(hint),
-            JSObject::Array(array) => todo!(),
+            JSObject::Array(array) => array.to_primitive(hint, interpreter),
         }
     }
 
@@ -170,6 +174,14 @@ impl JSObject {
         }
     }
 
+    pub fn get_property_mut(&mut self, key: &SymbolU32) -> Option<&mut ObjectProperty> {
+        match self {
+            JSObject::Ordinary(ordinary_object) => ordinary_object.get_property_mut(key),
+            JSObject::Function(function_object) => todo!(),
+            JSObject::Array(array) => array.get_property_mut(key),
+        }
+    }
+
     pub fn debug(&self, interpreter: &mut Interpreter) -> String {
         match self {
             JSObject::Ordinary(ordinary_object) => ordinary_object.debug(interpreter),
@@ -178,7 +190,7 @@ impl JSObject {
         }
     }
 
-    fn new_built_in_fn<F>(name: &str, f: F, interpreter: &mut Interpreter) -> Property
+    pub fn new_built_in_fn<F>(name: &str, f: F, interpreter: &mut Interpreter) -> Property
     where
         F: Fn(&mut Interpreter) -> FunctionObject,
     {
@@ -304,6 +316,19 @@ impl ObjectProperty {
             } => return Ok(value),
             _ => unimplemented!(),
         }
+    }
+
+    pub fn set_value(&mut self, value: JSValue) {
+        let old_value = match self {
+            Self::Data {
+                value,
+                writable,
+                enumerable,
+                configurable,
+            } => value,
+            _ => unimplemented!(),
+        };
+        *old_value = value;
     }
 }
 

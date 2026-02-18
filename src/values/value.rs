@@ -56,8 +56,9 @@ impl JSValue {
     ) -> JSResult<JSValue> {
         match self {
             JSValue::Object { object_id, kind: _ } => {
-                let obj = interpreter.get_object(*object_id)?;
-                let res = obj.to_primitive(preferred_type.unwrap_or(PreferredType::Number))?;
+                let obj = interpreter.get_object(*object_id)?.clone();
+                let res =
+                    obj.to_primitive(preferred_type.unwrap_or(PreferredType::Number), interpreter)?;
                 Ok(res)
             }
             _ => Ok(self.clone()),
@@ -112,8 +113,8 @@ impl JSValue {
             }
             JSValue::Number { data: _ } => self.clone(),
             JSValue::Object { object_id, kind: _ } => {
-                let object = interpreter.get_object_mut(*object_id)?;
-                let prim_value = object.to_primitive(PreferredType::Number)?;
+                let object = interpreter.get_object_mut(*object_id)?.clone();
+                let prim_value = object.to_primitive(PreferredType::Number, interpreter)?;
                 prim_value.to_number(interpreter)?
             }
         };
@@ -265,8 +266,8 @@ impl JSValue {
             JSValue::Number { data } => get_or_intern_string(&data.to_string()),
             JSValue::BigInt => todo!(),
             JSValue::Object { object_id, kind: _ } => {
-                let object = interpreter.get_object(*object_id)?;
-                let prim_value = object.to_primitive(PreferredType::String)?;
+                let object = interpreter.get_object(*object_id)?.clone();
+                let prim_value = object.to_primitive(PreferredType::String, interpreter)?;
                 prim_value.to_string(interpreter)?
             }
         })

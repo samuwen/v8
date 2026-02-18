@@ -219,12 +219,27 @@ impl Expr {
                 panic!("{}", format!("Unhandled operator: {:?}", operator));
             }
             Expr::Assignment { identifier, right } => {
+                let rhs = right.evaluate(interpreter)?;
+                if let Expr::ObjectCall { identifier, expr } = &**identifier {
+                    let expr = expr.evaluate(interpreter)?;
+                    if let JSValue::Object { object_id, kind } = expr {
+                        let identifier = identifier.evaluate(interpreter)?; // accessor
+                        let key = identifier.to_string(interpreter)?;
+
+                        let object = interpreter.get_object_mut(object_id)?;
+                        let prop = object.get_property_mut(&key);
+                        if let Some(prop) = prop {
+                            prop.set_value(rhs);
+                            let value = prop.get_value()?;
+                            return Ok(value.clone());
+                        }
+                    }
+                }
                 let ident_index = if let Expr::Identifier { string_index } = **identifier {
                     string_index
                 } else {
                     return Err(JSError::new("Invalid left-hand side in assignment"));
                 };
-                let rhs = right.evaluate(interpreter)?;
                 let exists = interpreter.get_variable_from_current_environment(ident_index);
                 match exists {
                     Ok(var) => {
@@ -316,31 +331,26 @@ impl Expr {
                             return Ok(value);
                         }
                     }
-                    _ => unimplemented!(),
+                    JSValue::Number { data: _ } => {
+                        if let JSValue::Object { object_id, kind: _ } = expr {
+                            let ident = ident_res.to_string(interpreter)?;
+                            let object = interpreter.get_object(object_id)?;
+                            let property = object.get_property(&ident);
+                            if let Some(property) = property {
+                                let value = property.get_value()?;
+                                return Ok(value.clone());
+                            }
+                        }
+                    }
+                    _ => {
+                        println!("{ident_res:?}");
+                        println!("{expr:?}");
+                        unimplemented!()
+                    }
                 }
-                // println!("ident: {ident:?}");
-                // let ident = ident.to_string(interpreter)?;
-                // let value = interpreter.get_value_from_environment(ident);
-                // let object = match value {
-                //     Ok(v) => v,
-                //     Err(_) => {
-                //         let string_value =
-                //             get_string_from_pool(&ident).expect("Uninitialized string");
-                //         return Err(JSError::new(&format!(
-                //             "Unitialized variable: {string_value}"
-                //         )));
-                //     }
-                // };
-                // if let JSValue::Object { object_id, kind: _ } = *object {
-                //     let obj = interpreter.get_object(object_id).unwrap();
-                //     println!("obj: {obj:?}");
-                //     let property = obj.get_property(&key).unwrap();
-                //     let value = property.get_value()?.clone();
-                //     return Ok(value);
-                // }
 
                 Err(JSError::new("Object called with invalid property"))
-            } // implement function expressions and arrow functions
+            }
             Expr::FunctionDecl {
                 identifier,
                 arguments,
