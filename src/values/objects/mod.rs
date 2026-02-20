@@ -18,7 +18,9 @@ use crate::{
         CONSOLE_NAME, ERROR_NAME, GLOBAL_THIS_NAME, INFINITY_NAME, IS_FINITE_NAME, LOG_NAME,
         NAN_NAME, UNDEFINED_NAME,
     },
-    global::get_or_intern_string,
+    errors::JSError,
+    expr::Expr,
+    global::{get_or_intern_string, get_string_from_pool},
     stmt::Stmt,
     values::{JSResult, JSValue, ObjectKind, PreferredType, objects::array::Array},
 };
@@ -124,7 +126,7 @@ impl JSObject {
         interpreter: &mut Interpreter,
     ) -> JSResult<JSValue> {
         match self {
-            JSObject::Ordinary(ordinary_object) => ordinary_object.to_primitive(hint),
+            JSObject::Ordinary(ordinary_object) => ordinary_object.to_primitive(hint, interpreter),
             JSObject::Function(function_object) => function_object.to_primitive(hint),
             JSObject::Array(array) => array.to_primitive(hint, interpreter),
         }
@@ -145,17 +147,9 @@ impl JSObject {
         }
     }
 
-    pub fn to_string(&self) -> JSResult<JSValue> {
-        match self {
-            JSObject::Ordinary(ordinary) => ordinary.to_string(),
-            JSObject::Function(function) => todo!(),
-            JSObject::Array(array) => todo!(),
-        }
-    }
-
     pub fn call(
         &self,
-        args: Vec<JSValue>,
+        args: &Vec<Expr>,
         name: Option<&SymbolU32>,
         interpreter: &mut Interpreter,
     ) -> JSResult<JSValue> {
@@ -179,6 +173,15 @@ impl JSObject {
             JSObject::Ordinary(ordinary_object) => ordinary_object.get_property_mut(key),
             JSObject::Function(function_object) => todo!(),
             JSObject::Array(array) => array.get_property_mut(key),
+        }
+    }
+
+    pub fn add_property(&mut self, key: SymbolU32, value: JSValue) {
+        let prop = ObjectProperty::new_from_value(value);
+        match self {
+            JSObject::Ordinary(ordinary_object) => ordinary_object.add_property(key, prop),
+            JSObject::Function(function_object) => todo!(),
+            JSObject::Array(array) => todo!(),
         }
     }
 
@@ -219,6 +222,40 @@ impl JSObject {
         };
         (str_id, js_value)
     }
+}
+
+pub fn get_object_property<'a>(
+    interpreter: &'a mut Interpreter,
+    object_value: &JSValue,
+    key: SymbolU32,
+) -> JSResult<&'a ObjectProperty> {
+    if let JSValue::Object { object_id, kind: _ } = object_value {
+        let object = interpreter.get_object(*object_id)?;
+        let key_string = get_string_from_pool(&key).unwrap();
+
+        let property = object.get_property(&key);
+        if let Some(prop) = property {
+            return Ok(prop);
+        }
+    }
+
+    Err(JSError::new("Could not get object property"))
+}
+
+pub fn get_object_property_mut<'a>(
+    interpreter: &'a mut Interpreter,
+    object_value: &JSValue,
+    key: SymbolU32,
+) -> JSResult<&'a mut ObjectProperty> {
+    if let JSValue::Object { object_id, kind: _ } = object_value {
+        let object = interpreter.get_object_mut(*object_id)?;
+        let property_opt = object.get_property_mut(&key);
+        if let Some(property) = property_opt {
+            return Ok(property);
+        }
+    }
+
+    Err(JSError::new("Could not get object property"))
 }
 
 struct ObjectPropertyBuilder {

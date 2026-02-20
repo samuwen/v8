@@ -46,7 +46,6 @@ pub enum JSValue {
     BigInt,
     Object { object_id: usize, kind: ObjectKind },
 }
-// TODO - add identifier type
 
 impl JSValue {
     pub fn to_primitive(
@@ -254,6 +253,25 @@ impl JSValue {
 
     pub fn to_big_int(&self) -> JSResult<JSValue> {
         todo!()
+    }
+
+    pub fn to_object<'a>(&'a self, interpreter: &'a mut Interpreter) -> JSResult<&'a JSObject> {
+        if let JSValue::Object { object_id, kind: _ } = self {
+            let obj = interpreter.get_object(*object_id)?;
+            return Ok(obj);
+        }
+        Err(JSError::new("JSValue is not an object"))
+    }
+
+    pub fn to_object_mut<'a>(
+        &'a self,
+        interpreter: &'a mut Interpreter,
+    ) -> JSResult<&'a mut JSObject> {
+        if let JSValue::Object { object_id, kind: _ } = self {
+            let obj = interpreter.get_object_mut(*object_id)?;
+            return Ok(obj);
+        }
+        Err(JSError::new("JSValue is not an object"))
     }
 
     pub fn to_string(&self, interpreter: &mut Interpreter) -> JSResult<SymbolU32> {

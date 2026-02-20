@@ -8,7 +8,7 @@ use string_interner::symbol::SymbolU32;
 use crate::{
     Interpreter,
     errors::JSError,
-    expr::Expr,
+    expr::{Expr, ObjectCallKind},
     global::get_or_intern_string,
     stmt::Stmt,
     token::{Kind, Token},
@@ -346,8 +346,7 @@ impl<'a> Parser<'a> {
             match prev.get_kind() {
                 Kind::Dot => {
                     let ident = self.get_identifier()?;
-                    // looks weird - in this case we want to make sure that the 'identifier' is the called item
-                    left = Expr::new_object_call(ident, left);
+                    left = Expr::new_object_call(left, ident, ObjectCallKind::Dot);
                 }
                 Kind::LeftParen => {
                     let args = if self.current_token.is_kind(&Kind::RightParen) {
@@ -368,8 +367,8 @@ impl<'a> Parser<'a> {
                 }
                 Kind::LeftSquare => {
                     let expr = self.handle_expressions()?;
-                    self.expect_and_consume(&Kind::RightSquare, "CallExpr")?;
-                    left = Expr::new_object_call(left, expr);
+                    self.expect_and_consume(&Kind::RightSquare, "SquareCallExpr")?;
+                    left = Expr::new_object_call(left, expr, ObjectCallKind::Square);
                 }
                 _ => (),
             }
@@ -393,8 +392,7 @@ impl<'a> Parser<'a> {
                 return Ok(Expr::new_literal(JSValue::new_number(&num)));
             }
             Kind::String => {
-                let source_with_quotes = format!("'{source_value}'");
-                let idx = get_or_intern_string(&source_with_quotes);
+                let idx = get_or_intern_string(&source_value);
                 Ok(Expr::new_literal(JSValue::new_string(&idx)))
             }
             Kind::Identifier => {

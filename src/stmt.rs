@@ -6,6 +6,7 @@ use crate::{
     Interpreter,
     errors::{ErrorKind, JSError},
     expr::Expr,
+    global::get_string_from_pool,
     utils::get_function_params,
     values::{JSObject, JSResult, JSValue, ObjectKind},
 };
@@ -213,8 +214,20 @@ impl Stmt {
                 initializer,
             } => {
                 // establish the variable name
-                let ident = identifier.evaluate(interpreter)?;
-                let str_id = ident.to_string(interpreter)?;
+                let string_index = if let Expr::Identifier { string_index } = &**identifier {
+                    let already_exists =
+                        interpreter.does_local_environment_already_have_variable(string_index);
+                    if already_exists {
+                        let kind = if *is_mutable { "let" } else { "const" };
+                        let name = get_string_from_pool(string_index).unwrap(); // we know it already exists
+                        return Err(JSError::new(&format!(
+                            "SyntaxError: redeclaration of {kind} {name}"
+                        )));
+                    }
+                    string_index
+                } else {
+                    return Err(JSError::new("Identifier expected"));
+                };
                 // right hand side is either the expr evaluation or undefined
                 let rhs = match initializer {
                     Some(init_expr) => init_expr.evaluate(interpreter)?,
@@ -230,7 +243,7 @@ impl Stmt {
                     }
                 };
                 // add a new variable to the variable heap
-                interpreter.new_variable(str_id, *is_mutable, rhs);
+                interpreter.new_variable(*string_index, *is_mutable, rhs);
 
                 Ok(JSValue::Undefined)
             }

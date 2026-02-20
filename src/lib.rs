@@ -96,9 +96,11 @@ impl Interpreter {
         let mut lexer = Lexer::new(&self.source);
         let tokens = lexer.lex();
 
+        debug!("=========== LEXER OUTPUT ===========");
         for token in tokens.iter() {
             debug!("{token:?}");
         }
+        debug!("=========== END LEXER OUTPUT ===========\n");
 
         if lexer.had_errors() {
             lexer.replay_errors();
@@ -130,8 +132,8 @@ impl Interpreter {
         self.heap.add_object(value)
     }
 
-    fn get_object(&self, obj_id: usize) -> JSResult<&JSObject> {
-        self.heap.get_object(obj_id)
+    fn get_object(&self, object_id: usize) -> JSResult<&JSObject> {
+        self.heap.get_object(object_id)
     }
 
     fn get_object_mut(&mut self, obj_id: usize) -> JSResult<&mut JSObject> {
@@ -139,12 +141,13 @@ impl Interpreter {
     }
 
     fn add_variable_to_current_environment(&mut self, str_id: SymbolU32, var_id: usize) {
+        let current_env_handle = self.get_current_environment_handle().clone();
         let current_environment = self
             .get_current_environment_mut()
             .expect("Somehow you deleted all environments");
         current_environment.add_variable(str_id, var_id);
         debug!(
-            "Added variable id: {} to environment {current_environment}",
+            "Added variable id: {} to environment ({current_env_handle}) {current_environment}",
             str_id.to_usize()
         );
     }
@@ -162,6 +165,17 @@ impl Interpreter {
 
         // we didn't find the variable - so check the global object since it wasn't invoked directly
         self.get_value_from_global_this(str_id)
+    }
+
+    fn does_local_environment_already_have_variable(&self, string_id: &SymbolU32) -> bool {
+        let environment_handle = self
+            .environment_stack
+            .last()
+            .expect("Environment stack empty, something is fucked");
+        let environment = self
+            .get_environment(*environment_handle)
+            .expect("Environment ID not found in heap");
+        environment.has_variable(string_id)
     }
 
     fn get_value_from_global_this(&mut self, str_id: SymbolU32) -> JSResult<&JSValue> {

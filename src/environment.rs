@@ -29,6 +29,10 @@ impl Environment {
         None
     }
 
+    pub fn has_variable(&self, string_id: &StringId) -> bool {
+        self.handles.contains_key(string_id)
+    }
+
     pub fn add_variable(&mut self, string_id: StringId, variable_id: VariableId) {
         self.handles.insert(string_id, variable_id);
         trace!("{:?}", self);

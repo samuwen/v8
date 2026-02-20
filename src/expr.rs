@@ -1,5 +1,6 @@
 use std::fmt;
 
+use log::debug;
 use string_interner::symbol::SymbolU32;
 
 use crate::{
@@ -9,13 +10,20 @@ use crate::{
     stmt::Stmt,
     token::{Kind, Token},
     utils::get_function_params,
-    values::{JSObject, JSResult, JSValue, ObjectKind},
+    values::{
+        JSObject, JSResult, JSValue, ObjectKind, get_object_property, get_object_property_mut,
+    },
 };
-
 #[derive(Clone, Debug)]
 pub enum LogKind {
     Log,
     Error,
+}
+
+#[derive(Clone, Debug)]
+pub enum ObjectCallKind {
+    Dot,
+    Square,
 }
 
 #[derive(Clone, Debug)]
@@ -43,8 +51,9 @@ pub enum Expr {
         string_index: SymbolU32,
     },
     ObjectCall {
-        identifier: Box<Expr>,
-        expr: Box<Expr>,
+        kind: ObjectCallKind,
+        object: Box<Expr>,
+        accessor: Box<Expr>,
     },
     FunctionCall {
         identifier: Box<Expr>,
@@ -104,10 +113,11 @@ impl Expr {
         }
     }
 
-    pub fn new_object_call(expr: Expr, identifier: Expr) -> Self {
+    pub fn new_object_call(object: Expr, accessor: Expr, kind: ObjectCallKind) -> Self {
         Self::ObjectCall {
-            identifier: Box::new(identifier),
-            expr: Box::new(expr),
+            kind,
+            object: Box::new(object),
+            accessor: Box::new(accessor),
         }
     }
 
@@ -218,22 +228,40 @@ impl Expr {
                 }
                 panic!("{}", format!("Unhandled operator: {:?}", operator));
             }
+            Expr::Grouping { expr } => Ok(expr.evaluate(interpreter)?),
+            Expr::Identifier { string_index } => {
+                let exists = interpreter.get_value_from_environment(*string_index);
+                match exists {
+                    Ok(val) => Ok(val.clone()),
+                    Err(_) => Ok(JSValue::new_string(string_index)),
+                }
+            }
             Expr::Assignment { identifier, right } => {
                 let rhs = right.evaluate(interpreter)?;
-                if let Expr::ObjectCall { identifier, expr } = &**identifier {
-                    let expr = expr.evaluate(interpreter)?;
-                    if let JSValue::Object { object_id, kind } = expr {
-                        let identifier = identifier.evaluate(interpreter)?; // accessor
-                        let key = identifier.to_string(interpreter)?;
-
-                        let object = interpreter.get_object_mut(object_id)?;
-                        let prop = object.get_property_mut(&key);
-                        if let Some(prop) = prop {
-                            prop.set_value(rhs);
-                            let value = prop.get_value()?;
-                            return Ok(value.clone());
+                match &**identifier {
+                    Expr::ObjectCall {
+                        kind: _,
+                        object,
+                        accessor,
+                    } => {
+                        let object = object.evaluate(interpreter)?;
+                        let accessor = accessor.evaluate(interpreter)?;
+                        let key = accessor.to_string(interpreter)?;
+                        let property_res = get_object_property_mut(interpreter, &object, key);
+                        match property_res {
+                            Ok(prop) => {
+                                prop.set_value(rhs.clone());
+                                return Ok(rhs);
+                            }
+                            Err(_) => {
+                                // new property
+                                let object = object.to_object_mut(interpreter)?;
+                                object.add_property(key, rhs.clone());
+                                return Ok(rhs);
+                            }
                         }
                     }
+                    _ => (),
                 }
                 let ident_index = if let Expr::Identifier { string_index } = **identifier {
                     string_index
@@ -255,101 +283,39 @@ impl Expr {
                     Err(_) => Ok(JSValue::new_string(&ident_index)),
                 }
             }
-            Expr::Grouping { expr } => Ok(expr.evaluate(interpreter)?),
-            Expr::Identifier { string_index } => {
-                let exists = interpreter.get_value_from_environment(*string_index);
-                match exists {
-                    Ok(val) => Ok(val.clone()),
-                    Err(_) => Ok(JSValue::new_string(string_index)),
-                }
-            }
             Expr::FunctionCall {
                 identifier,
                 arguments,
             } => {
-                let args = arguments
-                    .into_iter()
-                    .map(|arg| {
-                        let res = arg.evaluate(interpreter)?;
-                        Ok(res)
-                    })
-                    .collect::<JSResult<Vec<JSValue>>>()?;
-                // get variable out of local environment
                 let value = identifier.evaluate(interpreter)?;
                 match value {
                     JSValue::String { data: ident_index } => {
                         let value = interpreter.get_value_from_environment(ident_index)?.clone();
                         let object = value.get_object(interpreter)?.clone();
-                        let result = object.call(args, Some(&ident_index), interpreter)?;
+                        let result = object.call(arguments, Some(&ident_index), interpreter)?;
                         Ok(result)
                     }
                     JSValue::Object { object_id, kind } => {
                         if let ObjectKind::Function = kind {
                             let obj = interpreter.get_object(object_id)?.clone();
-                            let result = obj.call(args, None, interpreter)?;
+                            let result = obj.call(arguments, None, interpreter)?;
                             return Ok(result);
                         }
                         panic!("Attempting to call an ordinary object")
                     }
                     _ => panic!("Attempting to call something that should not be called"),
                 }
-                // let ident_index = value.to_string(interpreter)?;
-                // let value = interpreter
-                //     .get_value_from_environment(None, ident_index)?
-                //     .clone();
-                // let object = value.get_object(interpreter)?.clone();
-                // let result = object.call(args, &ident_index, interpreter)?;
-                // Ok(result)
             }
-            Expr::ObjectCall { identifier, expr } => {
-                let expr = expr.evaluate(interpreter)?;
-                let key = expr.to_string(interpreter)?;
-                let ident_res = identifier.evaluate(interpreter)?;
-                match ident_res {
-                    JSValue::Object { object_id, kind: _ } => {
-                        let object = interpreter.get_object(object_id)?;
-                        let property = object.get_property(&key).unwrap();
-                        let value = property.get_value()?.clone();
-                        return Ok(value);
-                    }
-                    JSValue::String { data: ident } => {
-                        let value = interpreter.get_value_from_environment(ident);
-                        let object = match value {
-                            Ok(v) => v,
-                            Err(_) => {
-                                let string_value =
-                                    get_string_from_pool(&ident).expect("Uninitialized string");
-                                return Err(JSError::new(&format!(
-                                    "Unitialized variable: {string_value}"
-                                )));
-                            }
-                        };
-                        if let JSValue::Object { object_id, kind: _ } = *object {
-                            let obj = interpreter.get_object(object_id).unwrap();
-                            let property = obj.get_property(&key).unwrap();
-                            let value = property.get_value()?.clone();
-                            return Ok(value);
-                        }
-                    }
-                    JSValue::Number { data: _ } => {
-                        if let JSValue::Object { object_id, kind: _ } = expr {
-                            let ident = ident_res.to_string(interpreter)?;
-                            let object = interpreter.get_object(object_id)?;
-                            let property = object.get_property(&ident);
-                            if let Some(property) = property {
-                                let value = property.get_value()?;
-                                return Ok(value.clone());
-                            }
-                        }
-                    }
-                    _ => {
-                        println!("{ident_res:?}");
-                        println!("{expr:?}");
-                        unimplemented!()
-                    }
-                }
-
-                Err(JSError::new("Object called with invalid property"))
+            Expr::ObjectCall {
+                kind: _,
+                object,
+                accessor,
+            } => {
+                let object = object.evaluate(interpreter)?;
+                let accessor = accessor.evaluate(interpreter)?.to_string(interpreter)?;
+                let property = get_object_property(interpreter, &object, accessor)?;
+                let value = property.get_value()?;
+                Ok(value.clone())
             }
             Expr::FunctionDecl {
                 identifier,
@@ -386,22 +352,8 @@ impl Expr {
                 if let Ok(var) = variable {
                     let value = var.get_value_cloned();
                     let s = value.to_string(interpreter)?;
-                    let maybe_val = interpreter.get_value_from_environment(s);
-                    match maybe_val {
-                        Ok(val) => {
-                            let value = val.clone().to_string(interpreter)?;
-                            let string = get_string_from_pool(&value);
-                            if let Some(out) = string {
-                                add_message(&out, kind, interpreter);
-                            }
-                        }
-                        Err(_) => {
-                            let s = get_string_from_pool(&s);
-                            if let Some(out) = s {
-                                add_message(&out, kind, interpreter);
-                            }
-                        }
-                    }
+                    let string_value = get_string_from_pool(&s).unwrap();
+                    add_message(&string_value, kind, interpreter);
                 }
 
                 Ok(JSValue::Undefined)
@@ -419,6 +371,7 @@ fn add_message(message: &str, kind: &LogKind, interpreter: &mut Interpreter) {
         &message
     };
     let message = format!("{message}\n");
+    debug!("Adding {message} to {kind:?} output buffer");
     match kind {
         LogKind::Log => {
             interpreter.output_buffer.push_str(&message);
@@ -457,8 +410,12 @@ impl fmt::Display for Expr {
             Expr::Identifier { string_index } => {
                 write!(f, "Identifier({:?})", string_index)
             }
-            Expr::ObjectCall { identifier, expr } => {
-                write!(f, "ObjectCall {} ({})", identifier, expr)
+            Expr::ObjectCall {
+                kind,
+                object,
+                accessor,
+            } => {
+                write!(f, "ObjectCall {} {:?} ({})", object, kind, accessor)
             }
             Expr::FunctionCall {
                 identifier,

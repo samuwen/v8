@@ -4,7 +4,7 @@ mod string;
 mod value;
 
 pub use number::*;
-pub use objects::JSObject;
+pub use objects::{JSObject, get_object_property, get_object_property_mut};
 pub use value::*;
 
 use crate::errors::JSError;

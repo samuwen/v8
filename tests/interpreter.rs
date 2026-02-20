@@ -559,44 +559,44 @@ mod tests {
     // // OBJECTS
     // // ==========================================================================
 
-    // #[test]
-    // fn test_object_literal() {
-    //     let source = r#"
-    //         let obj = {x: 10, y: 20};
-    //         console.log(obj.x);
-    //         console.log(obj.y);
-    //     "#;
-    //     assert_eq!(run(source), "10\n20\n");
-    // }
+    #[test]
+    fn test_object_literal() {
+        let source = r#"
+            let obj = {x: 10, y: 20};
+            console.log(obj.x);
+            console.log(obj.y);
+        "#;
+        assert_eq!(run(source), "10\n20\n");
+    }
 
-    // #[test]
-    // fn test_empty_object() {
-    //     let source = r#"
-    //         let obj = {};
-    //         console.log(obj);
-    //     "#;
-    //     assert_eq!(run(source), "{}\n");
-    // }
+    #[test]
+    fn test_empty_object() {
+        let source = r#"
+            let obj = {};
+            console.log(obj);
+        "#;
+        assert_eq!(run(source), "{}\n");
+    }
 
-    // #[test]
-    // fn test_object_property_assignment() {
-    //     let source = r#"
-    //         let obj = {x: 5};
-    //         obj.x = 10;
-    //         console.log(obj.x);
-    //     "#;
-    //     assert_eq!(run(source), "10\n");
-    // }
+    #[test]
+    fn test_object_property_assignment() {
+        let source = r#"
+            let obj = {x: 5};
+            obj.x = 10;
+            console.log(obj.x);
+        "#;
+        assert_eq!(run(source), "10\n");
+    }
 
-    // #[test]
-    // fn test_object_new_property() {
-    //     let source = r#"
-    //         let obj = {};
-    //         obj.name = 'test';
-    //         console.log(obj.name);
-    //     "#;
-    //     assert_eq!(run(source), "test\n");
-    // }
+    #[test]
+    fn test_object_new_property() {
+        let source = r#"
+            let obj = {};
+            obj.name = 'test';
+            console.log(obj.name);
+        "#;
+        assert_eq!(run(source), "test\n");
+    }
 
     // #[test]
     // fn test_object_bracket_notation() {

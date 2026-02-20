@@ -57,16 +57,12 @@ impl FunctionObject {
         }
     }
 
-    pub fn call(
-        &self,
-        arguments: Vec<JSValue>,
-        interpreter: &mut Interpreter,
-    ) -> JSResult<JSValue> {
+    pub fn call(&self, arguments: &Vec<Expr>, interpreter: &mut Interpreter) -> JSResult<JSValue> {
         interpreter.enter_scope(Some(self.environment_id));
         debug!("function arguments: {:?}", arguments);
-        let args = arguments.iter();
-        for (param, arg) in self.formal_parameters.iter().zip(args) {
-            interpreter.bind_variable(*param, arg)?;
+        for (param, arg) in self.formal_parameters.iter().zip(arguments.iter()) {
+            let argument = arg.evaluate(interpreter)?;
+            interpreter.bind_variable(*param, &argument)?;
         }
         let result = self.call.evaluate(interpreter);
         let result = match result {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use string_interner::symbol::SymbolU32;
+use string_interner::{Symbol, symbol::SymbolU32};
 
 use crate::{
     Interpreter, debug_value,
@@ -46,7 +46,11 @@ impl OrdinaryObject {
         }
     }
 
-    pub fn to_primitive(&self, hint: PreferredType) -> JSResult<JSValue> {
+    pub fn to_primitive(
+        &self,
+        hint: PreferredType,
+        interpreter: &mut Interpreter,
+    ) -> JSResult<JSValue> {
         let prim_sym = get_or_intern_string(TO_PRIMITIVE_SYM);
         let maybe_property = self.properties.get(&prim_sym);
         match maybe_property {
@@ -66,7 +70,7 @@ impl OrdinaryObject {
                         }
                     }
                     if method == "to_string" {
-                        return self.to_string();
+                        return self.to_string(interpreter);
                     }
                 }
                 let error = JSError::new_function_type_error("unknown");
@@ -75,8 +79,38 @@ impl OrdinaryObject {
         }
     }
 
-    pub fn to_string(&self) -> JSResult<JSValue> {
-        let sym = get_or_intern_string("[object Object]");
+    pub fn to_string(&self, interpreter: &mut Interpreter) -> JSResult<JSValue> {
+        let values = self
+            .properties
+            .iter()
+            .map(|(key, prop)| {
+                let key = get_string_from_pool(key).unwrap();
+                let val = prop.get_value()?;
+                let res = val.to_string(interpreter)?;
+                let string = get_string_from_pool(&res)
+                    .expect("An object has a value that doesn't exist in the string pool?");
+                Ok(format!("{key}: {string}"))
+            })
+            .collect::<JSResult<Vec<String>>>()?
+            .join(", ");
+        let values = if values.len() > 70 {
+            let mut new_values = String::new();
+            let mut found = false;
+            for c in values.chars() {
+                if found {
+                    new_values.push('\n');
+                    found = false;
+                }
+                if c == ',' || c == '{' || c == '}' {
+                    found = true;
+                }
+                new_values.push(c);
+            }
+            new_values
+        } else {
+            values
+        };
+        let sym = get_or_intern_string(&format!("{{{values}}}"));
         Ok(JSValue::new_string(&sym))
     }
 
@@ -130,7 +164,8 @@ impl std::fmt::Display for OrdinaryObject {
         writeln!(f, "Object: {{")?;
         for (key, value) in &self.properties {
             let string = get_string_from_pool(&key).unwrap();
-            writeln!(f, "\t {string}: {:?}", value.get_value())?;
+            let key_index = key.to_usize();
+            writeln!(f, "\t ({key_index}){string}: {:?}", value.get_value())?;
         }
         writeln!(f, "}}")
     }
